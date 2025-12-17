@@ -1,0 +1,202 @@
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>夢叶カレンダー（試作）</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="row">
+      <h1 id="title">2026年1月</h1>
+      <button id="helpBtn" class="ghost">？</button>
+    </div>
+
+    <div class="row">
+      <label class="label">本命星</label>
+      <select id="honmeiSelect">
+        <option value="1">一白水星</option>
+        <option value="2">二黒土星</option>
+        <option value="3">三碧木星</option>
+        <option value="4">四緑木星</option>
+        <option value="5">五黄土星</option>
+        <option value="6">六白金星</option>
+        <option value="7">七赤金星</option>
+        <option value="8">八白土星</option>
+        <option value="9">九紫火星</option>
+      </select>
+
+      <label class="label">月</label>
+      <input id="monthInput" type="month" value="2026-01" />
+    </div>
+
+    <p id="subtitle" class="sub"></p>
+  </header>
+
+  <main class="wrap">
+    <section id="calendar" class="calendar"></section>
+
+    <section id="detail" class="detail hidden">
+      <div class="detailHead">
+        <button id="backBtn" class="ghost">← 戻る</button>
+        <h2 id="detailDate"></h2>
+      </div>
+
+      <div class="card">
+        <div class="kv">
+          <div>
+            <div class="k">参照 年運</div>
+            <div id="refYear" class="v"></div>
+          </div>
+          <div>
+            <div class="k">参照 月運</div>
+            <div id="refMonth" class="v"></div>
+          </div>
+        </div>
+
+        <hr/>
+
+        <div class="kv">
+          <div>
+            <div class="k">今日の宮</div>
+            <div id="dayPalace" class="v"></div>
+          </div>
+          <div>
+            <div class="k">点数（月運）</div>
+            <div id="dayScore" class="v"></div>
+          </div>
+        </div>
+
+        <div class="kv">
+          <div>
+            <div class="k">凶（青：日）</div>
+            <div id="dayBad" class="v"></div>
+          </div>
+          <div>
+            <div class="k">凶（緑：月）</div>
+            <div id="monthBad" class="v"></div>
+          </div>
+        </div>
+
+        <p id="oneLine" class="oneLine"></p>
+
+        <div class="helpRow">
+          <button class="pill" data-pop="ha">？ 破</button>
+          <button class="pill" data-pop="an">？ ア</button>
+          <button class="pill" data-pop="go">？ 五黄殺</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>メモ（自動保存）</h3>
+        <textarea id="memo" rows="5" placeholder="今日の気づき／やること／感情などを短く"></textarea>
+        <div class="small">※この端末に保存されます（localStorage）</div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dialog">
+    <div class="dialogBody">
+      <h3 id="dialogTitle"></h3>
+      <p id="dialogText"></p>
+      <div class="dialogActions">
+        <button id="closeDialog" class="ghost">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+<script id="honmeiData" type="application/json">
+{
+  "honmei": 1,
+  "yearBlocks": [
+    {
+      "id": "2025",
+      "label": "2025年（年運）",
+      "range": { "start": "2025-02-04", "end": "2026-02-03" },
+      "fortuneName": "福運",
+      "score": 95,
+      "message": "人から信用を得て努力のかいあって花が咲くときです。最高の運気の年になります。何事も「ととのい」「まとまり」やすい年となります。盛運の好調の年ですが、軽々しい行動になりがちで、失敗のもととなります。この年に入ったら信用を得ることが先決です。顔にも心にも笑顔を絶やさず、常に喜びをもって他人に接することです。交際範囲も広がり、また結婚運も良好です。キーワード「調和」"
+    },
+    {
+      "id": "2026",
+      "label": "2026年（年運）",
+      "range": { "start": "2026-02-04", "end": "2027-02-03" },
+      "fortuneName": "静観運",
+      "score": 50,
+      "message": "2026年の運勢は、中心的な存在になる時です。実行に移さず静観し、次の年の準備期間です。善事善行を行ってきた人には吉事が、誤った方針を続けてきた人には凶事が極端に現れます。「大変化の年」とも言われ、結婚、転業、独立、移転、増改築、新築などの問題も出てきます。自分の力に応じた行動は、良い結果を招きます。しかし、あちらこちらに手を出すと、八方ふさがりになります。キーワード「内面・内部充実」"
+    }
+  ],
+  "monthBlocks": [
+    {
+      "id": "2025-12",
+      "label": "2025年12月（節入り）",
+      "range": { "start": "2025-12-05", "end": "2026-01-04" },
+      "fortuneName": "静観運",
+      "score": 55,
+      "goodGods": ["坎", "乾", "離"],
+      "tendo": ["巽"],
+      "board": {
+        "grid": [9, 5, 7, 8, 1, 3, 4, 6, 2],
+        "marks": { "gohosatsuPalace": "離", "ankensatsuPalace": "坎" }
+      },
+      "message": {
+        "good": [
+          "生活・心・環境を整える（不要な物・習慣・考え方を見直す）",
+          "体調管理・内面のケアを優先する（睡眠・食事・休息）",
+          "物事を俯瞰して見る時間を持つ（流れを見極める）"
+        ],
+        "caution": [
+          "焦って動き出さない（結果を急がない）",
+          "感情的な言動・極端な判断を避ける",
+          "あれもこれも手を出さない（一点集中）"
+        ]
+      }
+    },
+    {
+      "id": "2026-01",
+      "label": "2026年1月（節入り）",
+      "range": { "start": "2026-01-05", "end": "2026-02-03" },
+      "fortuneName": "強運",
+      "score": 55,
+      "goodGods": ["震"],
+      "tendo": ["兌"],
+      "board": {
+        "grid": [8, 4, 6, 7, 9, 2, 3, 5, 1],
+        "marks": { "gohosatsuPalace": "坎", "ankensatsuPalace": "離", "haPalace": "乾", "haType": "歳破" }
+      },
+      "message": {
+        "good": [
+          "人のために動く・与える行動を意識する（経験・知識・時間を分かち合う）",
+          "目標や立場にふさわしい振る舞いを心がける（言葉・態度・身だしなみ）",
+          "決断が必要なことは“正道”を選ぶ（誠実さが信頼に）"
+        ],
+        "caution": [
+          "強引さ・独断専行に注意（反発を招きやすい）",
+          "プライドや上から目線を避ける（謙虚さ）",
+          "約束・契約・ルールの軽視に注意（細部まで確認）"
+        ]
+      }
+    }
+  ],
+  "days": {
+    "2026-01-01": { "palace": "震", "dayWarnings": ["暗剣殺"], "monthWarnings": [] },
+    "2026-01-02": { "palace": "坤", "dayWarnings": [], "monthWarnings": [] },
+    "2026-01-03": { "palace": "坎", "dayWarnings": [], "monthWarnings": ["暗剣殺"] },
+    "2026-01-04": { "palace": "離", "dayWarnings": [], "monthWarnings": ["五黄殺"] },
+    "2026-01-05": { "palace": "艮", "dayWarnings": [], "monthWarnings": [] },
+    "2026-01-06": { "palace": "兌", "dayWarnings": [], "monthWarnings": [] },
+    "2026-01-07": { "palace": "乾", "dayWarnings": ["日破"], "monthWarnings": [] },
+    "2026-01-08": { "palace": "中", "dayWarnings": [], "monthWarnings": [] },
+    "2026-01-09": { "palace": "巽", "dayWarnings": [], "monthWarnings": [] },
+    "2026-01-10": { "palace": "震", "dayWarnings": ["暗剣殺"], "monthWarnings": [] }
+  }
+}
+</script>
+
+
+  <script src="app.js"></script>
+</body>
+</html>
+
