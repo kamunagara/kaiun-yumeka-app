@@ -155,28 +155,81 @@ dialog{
 
 
 
-/* ===== 八角形ミニ日盤（SVG） ===== */
-.oct-board{
-  margin-top: 6px;
+/* ===== v2：ホーム（カレンダー）を4点表示に最適化 ===== */
+#subtitle{ display:none; }        /* 説明は非表示 */
+.helpRow{ display:none; }        /* ？ボタン列は非表示 */
+
+/* 上段：日付・状態・記号 */
+.dayCell .topRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
 }
-.oct-svg{
-  width: 100%;
-  height: auto;
-  display: block;
+.dayCell .stateBadge{
+  font-size:12px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  opacity:0.95;
+}
+.dayCell .scoreNum{
+  font-weight: 900;
+  font-size: 18px;
+  opacity: 0.95;
+  min-width: 2.2em;
+  text-align: right;
 }
 
-/* 台形の塗り（デフォルトは透明） */
+/* 状態色（背景の雰囲気だけ変える） */
+.dayCell.state-行動{ box-shadow: 0 0 0 1px rgba(120,200,255,0.25) inset; }
+.dayCell.state-整え{ box-shadow: 0 0 0 1px rgba(200,200,200,0.15) inset; }
+.dayCell.state-注意{ box-shadow: 0 0 0 1px rgba(255,210,90,0.28) inset; }
+
+.dayCell.state-行動 .stateBadge{ background: rgba(120,200,255,0.18); }
+.dayCell.state-整え .stateBadge{ background: rgba(255,255,255,0.06); }
+.dayCell.state-注意 .stateBadge{ background: rgba(255,210,90,0.18); }
+
+/* 盤を少し大きくして見やすく */
+.dayCell .oct-board{ margin-top:8px; margin-bottom:8px; }
+.dayCell .oct-svg{ width:64px; height:64px; display:block; margin:0 auto; }
+
+/* 凶マーク行（ア／破のみ） */
+.dayCell .badRow{
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  min-height:28px;
+}
+
+/* バッジ（既存があれば上書きされる） */
+.badge{
+  font-size:12px;
+  padding:6px 14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.15);
+}
+
+
+/* スマホ最適化：盤を少し拡大 */
+@media (max-width: 480px){
+  .dayCell .oct-svg{ width:72px; height:72px; }
+}
+
+/* ===== 八角形：台形の塗りルール ===== */
+
+/* 1) まず全部透明（黒くならないように） */
 .oct-svg .trap{
   fill: transparent;
 }
 
-/* 日盤：五黄殺・暗剣殺（同じ色） */
+/* 2) 月盤の凶（薄緑） */
+.oct-svg .trap.monthbad{
+  fill: rgba(180, 235, 180, 0.35);
+}
+
+/* 3) 日盤の凶（水色） ※必ず最後に置く（優先させる） */
 .oct-svg .trap.goh,
 .oct-svg .trap.anken{
   fill: rgba(135, 206, 250, 0.35);
-}
-
-/* 月盤：五黄殺・暗剣殺（薄い黄緑） */
-.oct-svg .trap.monthbad{
-  fill: rgba(180, 235, 180, 0.35);
 }
