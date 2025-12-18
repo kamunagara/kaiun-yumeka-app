@@ -233,19 +233,62 @@ boot().catch(err => {
   alert(err.message);
 });
 
-
 function boardSvg(b){
-  // b: {NW,N,NE,W,C,E,SW,S,SE} numbers
-  // 八角形のミニ盤をSVGで返す（文字が薄くならないように明示色）
+  // 台形分割：内側八角形の頂点 → 外側八角形の頂点 を結ぶ
+  // b: {NW,N,NE,W,C,E,SW,S,SE}
+
+  // 外側八角形（頂点）
+  const O = [
+    [30, 6],   // 0:上左
+    [70, 6],   // 1:上右
+    [94, 30],  // 2:右上
+    [94, 70],  // 3:右下
+    [70, 94],  // 4:下右
+    [30, 94],  // 5:下左
+    [6,  70],  // 6:左下
+    [6,  30],  // 7:左上
+  ];
+
+  // 内側八角形（頂点）※中心(50,50)周り。ここを調整すると“台形の見た目”が変わります
+  // （2番目の画像っぽい「中心近くの小さな八角形」）
+ 
+const I = [
+  [44, 32],
+  [56, 32],
+  [68, 44],
+  [68, 56],
+  [56, 68],
+  [44, 68],
+  [32, 56],
+  [32, 44],
+];
+
+
   return `
   <svg class="oct-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-    <!-- octagon background -->
-    <path d="M30 6 L70 6 L94 30 L94 70 L70 94 L30 94 L6 70 L6 30 Z"
-          fill="#ffffff" opacity="0.96" stroke="#cfd8e3" stroke-width="2"/>
-    <!-- subtle inner -->
-    <path d="M30 10 L70 10 L90 30 L90 70 L70 90 L30 90 L10 70 L10 30 Z"
-          fill="none" stroke="#e5e7eb" stroke-width="1"/>
+    <!-- 外枠 -->
+    <path d="M${O[0][0]} ${O[0][1]} L${O[1][0]} ${O[1][1]} L${O[2][0]} ${O[2][1]} L${O[3][0]} ${O[3][1]}
+             L${O[4][0]} ${O[4][1]} L${O[5][0]} ${O[5][1]} L${O[6][0]} ${O[6][1]} L${O[7][0]} ${O[7][1]} Z"
+          fill="#ffffff" stroke="#111111" stroke-width="2.2" />
 
+    <!-- 内側八角形 -->
+    <path d="M${I[0][0]} ${I[0][1]} L${I[1][0]} ${I[1][1]} L${I[2][0]} ${I[2][1]} L${I[3][0]} ${I[3][1]}
+             L${I[4][0]} ${I[4][1]} L${I[5][0]} ${I[5][1]} L${I[6][0]} ${I[6][1]} L${I[7][0]} ${I[7][1]} Z"
+          fill="none" stroke="#111111" stroke-width="2" />
+
+    <!-- 台形分割線：内側頂点→外側頂点（放射ではなく“頂点同士”） -->
+    ${seg(I[0], O[0])}
+    ${seg(I[1], O[1])}
+    ${seg(I[2], O[2])}
+    ${seg(I[3], O[3])}
+    ${seg(I[4], O[4])}
+    ${seg(I[5], O[5])}
+    ${seg(I[6], O[6])}
+    ${seg(I[7], O[7])}
+
+    
+
+    <!-- 数字（囲い無し）※位置は必要なら後で微調整できます -->
     ${svgCell(25,25,b.NW)}
     ${svgCell(50,18,b.N)}
     ${svgCell(75,25,b.NE)}
@@ -258,20 +301,27 @@ function boardSvg(b){
   </svg>`;
 }
 
+function seg(a, b){
+  return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#111111" stroke-width="2" />`;
+}
+
+
+
 function svgCell(x,y,val,isCenter=false){
-  const size = 18;
-  const rx = 4;
-  const stroke = isCenter ? "#b8860b" : "#cfd8e3";
-  const sw = isCenter ? 2 : 1.2;
-  const fill = isCenter ? "#fff7e0" : "#ffffff";
-  const textFill = "#111827";
+  const textFill = isCenter ? "#b8860b" : "#111827";
+  const fontSize = isCenter ? 15 : 13;   // ← 数字を大きく
+
   return `
-    <g>
-      <rect x="${x - size/2}" y="${y - size/2}" width="${size}" height="${size}" rx="${rx}"
-            fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>
-      <text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" font-weight="${isCenter?800:700}"
-            fill="${textFill}" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">${val}</text>
-    </g>`;
+    <text
+      x="${x}"
+      y="${y + 5}"
+      text-anchor="middle"
+      font-size="${fontSize}"
+      font-weight="${isCenter ? 800 : 700}"
+      fill="${textFill}"
+      font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+    >${val}</text>
+  `;
 }
 
 
