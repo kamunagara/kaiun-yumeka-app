@@ -179,12 +179,17 @@ const hasHa = dayWarnings.includes("日破");
     const cell = document.createElement("div");
     cell.className = `dayCell state-${state}`;
 
+const mark = hasAn ? "ア" : (hasHa ? "破" : "");
+
     cell.innerHTML = `
-      <div class="topRow">
-        <div class="dayNum">${d}</div>
-        <div class="stateBadge">${state}</div>
-        <div class="scoreNum">${dayScore}</div>
-      </div>
+<div class="topRow">
+  <div class="topLeft">
+    <div class="dayNum">${d}</div>
+    ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
+    <div class="stateBadge">${state}</div>
+  </div>
+  <div class="scoreNum">${dayScore}</div>
+</div>
 
     <div class="oct-board">${boardSvg(board, monthGohPalace, monthAnkenPalace)}</div>
 

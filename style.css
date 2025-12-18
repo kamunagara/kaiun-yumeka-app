@@ -192,7 +192,7 @@ dialog{
 
 /* 盤を少し大きくして見やすく */
 .dayCell .oct-board{ margin-top:8px; margin-bottom:8px; }
-.dayCell .oct-svg{ width:64px; height:64px; display:block; margin:0 auto; }
+.dayCell .oct-svg{ width:90px; height:90px; margin:8px auto; }
 
 /* 凶マーク行（ア／破のみ） */
 .dayCell .badRow{
@@ -232,4 +232,59 @@ dialog{
 .oct-svg .trap.goh,
 .oct-svg .trap.anken{
   fill: rgba(135, 206, 250, 0.35);
+}
+/* ホーム（月カレンダー）の日盤サイズ：大きめ */
+.dayCell .oct-board{
+  width: 130px;
+  height: 130px;
+  margin: 4px auto 0; /* 下の余白を減らす */
+}
+
+.dayCell .oct-board .oct-svg{
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 上段を必ず横並びにする */
+.dayCell .topRow{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* 日付＋ア/破＋注意 を左側で横並びに */
+.dayCell .topLeft{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* 注意/整え/行動は横書き固定＆改行しない */
+.dayCell .stateBadge{
+  writing-mode: horizontal-tb !important;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  line-height: 1;
+}
+
+.dayCell .badRow{
+  display: none !important;
+}
+
+.dayCell .oct-board{
+  margin-top: 4px;
+  margin-bottom: 0px;
+}
+
+.dayCell .kyoMini{
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 900;
 }
