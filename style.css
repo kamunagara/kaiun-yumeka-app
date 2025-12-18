@@ -164,3 +164,19 @@ dialog{
   height: auto;
   display: block;
 }
+
+/* 台形の塗り（デフォルトは透明） */
+.oct-svg .trap{
+  fill: transparent;
+}
+
+/* 日盤：五黄殺・暗剣殺（同じ色） */
+.oct-svg .trap.goh,
+.oct-svg .trap.anken{
+  fill: rgba(135, 206, 250, 0.35);
+}
+
+/* 月盤：五黄殺・暗剣殺（薄い黄緑） */
+.oct-svg .trap.monthbad{
+  fill: rgba(180, 235, 180, 0.35);
+}

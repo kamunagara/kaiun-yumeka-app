@@ -94,7 +94,7 @@ memoEl.addEventListener("input", () => {
 });
 
 async function loadHonmei(honmei){
- // まず index.html に埋め込んだJSONがあればそれを使う（file://でも動く）
+  // まず index.html に埋め込んだJSONがあればそれを使う（file://でも動く）
   const embedded = document.getElementById("honmeiData");
   if (embedded && embedded.textContent.trim().startsWith("{")) {
     data = JSON.parse(embedded.textContent);
@@ -105,7 +105,7 @@ async function loadHonmei(honmei){
   const url = `data/2026/honmei-${honmei}.json`;
   const res = await fetch(url);
   if(!res.ok) throw new Error(`データが読めません: ${url}`);
-  data = await res.json();  
+  data = await res.json();
 }
 
 function renderMonth(){
@@ -116,17 +116,19 @@ function renderMonth(){
   titleEl.textContent = `${yyyy}年${mm}月`;
   calendarEl.innerHTML = "";
 
-  // 1日〜末日
   const maxDay = daysInMonth(yyyy, mm);
 
   for(let d=1; d<=maxDay; d++){
     const dateStr = `${yyyyStr}-${mmStr}-${String(d).padStart(2,"0")}`;
     const dayObj = data.days[dateStr];
 
-    // データが無い日は「日情報なし」でも表示はする（あとで埋められる）
     const palace = dayObj?.palace ?? "—";
     const monthBlock = findMonthBlock(dateStr);
     const score = monthBlock?.score ?? "—";
+
+    // ★ 月盤の五黄殺・暗剣殺（宮）を取得（monthBlocks.board.marks から）
+    const monthGohPalace   = monthBlock?.board?.marks?.gohosatsuPalace ?? null;
+    const monthAnkenPalace = monthBlock?.board?.marks?.ankensatsuPalace ?? null;
 
     // サブタイトル：月運の切替案内（1回だけ表示）
     if(d === 1){
@@ -144,7 +146,7 @@ function renderMonth(){
     cell.className = "dayCell";
     cell.innerHTML = `
       <div class="dayNum">${d}</div>
-      <div class="oct-board">${boardSvg(board)}</div>
+      <div class="oct-board">${boardSvg(board, monthGohPalace, monthAnkenPalace)}</div>
       <div class="meta">日盤宮：${palace}　月運：${score}</div>
       <div class="marks"></div>
     `;
@@ -175,16 +177,13 @@ function renderMonth(){
   }
 }
 
-
 function pickOneLine(dateStr){
   const dayObj = data.days[dateStr];
   const monthBlock = findMonthBlock(dateStr);
   if(!monthBlock) return "";
 
   const hasBad = (dayObj?.dayWarnings?.length || 0) + (dayObj?.monthWarnings?.length || 0) > 0;
-
   const src = hasBad ? monthBlock.message.caution : monthBlock.message.good;
-  // 先頭を1つ返す（後でランダムにもできる）
   return src?.[0] ?? "";
 }
 
@@ -208,7 +207,6 @@ function openDetail(dateStr){
 
   oneLineEl.textContent = pickOneLine(dateStr);
 
-  // メモ
   memoEl.dataset.date = dateStr;
   memoEl.value = localStorage.getItem(memoKey(dateStr)) ?? "";
 }
@@ -227,56 +225,97 @@ monthInput.addEventListener("change", () => {
   renderMonth();
 });
 
-// 初期起動
 boot().catch(err => {
   console.error(err);
   alert(err.message);
 });
 
-function boardSvg(b){
-  // 台形分割：内側八角形の頂点 → 外側八角形の頂点 を結ぶ
-  // b: {NW,N,NE,W,C,E,SW,S,SE}
+/* ===== 八角形ミニ日盤（SVG） ===== */
 
+function boardSvg(b, monthGohPalace, monthAnkenPalace){
   // 外側八角形（頂点）
   const O = [
-    [30, 6],   // 0:上左
-    [70, 6],   // 1:上右
-    [94, 30],  // 2:右上
-    [94, 70],  // 3:右下
-    [70, 94],  // 4:下右
-    [30, 94],  // 5:下左
-    [6,  70],  // 6:左下
-    [6,  30],  // 7:左上
+    [30, 6],
+    [70, 6],
+    [94, 30],
+    [94, 70],
+    [70, 94],
+    [30, 94],
+    [6,  70],
+    [6,  30],
   ];
 
-  // 内側八角形（頂点）※中心(50,50)周り。ここを調整すると“台形の見た目”が変わります
-  // （2番目の画像っぽい「中心近くの小さな八角形」）
- 
-const I = [
-  [44, 32],
-  [56, 32],
-  [68, 44],
-  [68, 56],
-  [56, 68],
-  [44, 68],
-  [32, 56],
-  [32, 44],
-];
+  // 内側八角形（頂点）
+  const I = [
+    [44, 32],
+    [56, 32],
+    [68, 44],
+    [68, 56],
+    [56, 68],
+    [44, 68],
+    [32, 56],
+    [32, 44],
+  ];
 
+  // 日盤：五黄殺（数字5の方位）と暗剣殺（反対）
+  const gohDir = findDirOfNumber(b, 5);
+  const ankenDir = oppositeDir(gohDir);
+
+  // 月盤：五黄殺・暗剣殺（宮）→ 台形番号（九星気学の向き：上=南、右下=乾）
+  const palaceToSeg = {
+    "離": 0,
+    "坤": 1,
+    "兌": 2,
+    "乾": 3,
+    "坎": 4,
+    "艮": 5,
+    "震": 6,
+    "巽": 7
+  };
+  const monthGohSeg   = monthGohPalace   ? palaceToSeg[monthGohPalace]   : null;
+  const monthAnkenSeg = monthAnkenPalace ? palaceToSeg[monthAnkenPalace] : null;
+
+  function clsForTrap(i){
+    // i=0..7 を N,NE,E,SE,S,SW,W,NW に対応
+    const dirByIdx = ["N","NE","E","SE","S","SW","W","NW"];
+    const dir = dirByIdx[i];
+    const dayCls = (gohDir === dir) ? "goh" : (ankenDir === dir) ? "anken" : "";
+
+    // 月盤（黄緑）は、日盤（青）と重なったら表示しない
+    const hasDayBad = (dayCls === "goh" || dayCls === "anken");
+    const isMonthBad = (i === monthGohSeg) || (i === monthAnkenSeg);
+
+    let c = "trap";
+    if(dayCls) c += ` ${dayCls}`;
+    if(isMonthBad && !hasDayBad) c += " monthbad";
+    return c;
+  }
+
+  function trapezoid(i){
+    const i2 = (i + 1) % 8;
+    const cls = clsForTrap(i);
+    return `<polygon class="${cls}" points="${I[i][0]},${I[i][1]} ${I[i2][0]},${I[i2][1]} ${O[i2][0]},${O[i2][1]} ${O[i][0]},${O[i][1]}" />`;
+  }
 
   return `
   <svg class="oct-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-    <!-- 外枠 -->
     <path d="M${O[0][0]} ${O[0][1]} L${O[1][0]} ${O[1][1]} L${O[2][0]} ${O[2][1]} L${O[3][0]} ${O[3][1]}
              L${O[4][0]} ${O[4][1]} L${O[5][0]} ${O[5][1]} L${O[6][0]} ${O[6][1]} L${O[7][0]} ${O[7][1]} Z"
           fill="#ffffff" stroke="#111111" stroke-width="2.2" />
 
-    <!-- 内側八角形 -->
+    ${trapezoid(0)}
+    ${trapezoid(1)}
+    ${trapezoid(2)}
+    ${trapezoid(3)}
+    ${trapezoid(4)}
+    ${trapezoid(5)}
+    ${trapezoid(6)}
+    ${trapezoid(7)}
+
     <path d="M${I[0][0]} ${I[0][1]} L${I[1][0]} ${I[1][1]} L${I[2][0]} ${I[2][1]} L${I[3][0]} ${I[3][1]}
              L${I[4][0]} ${I[4][1]} L${I[5][0]} ${I[5][1]} L${I[6][0]} ${I[6][1]} L${I[7][0]} ${I[7][1]} Z"
           fill="none" stroke="#111111" stroke-width="2" />
 
-    <!-- 台形分割線：内側頂点→外側頂点（放射ではなく“頂点同士”） -->
     ${seg(I[0], O[0])}
     ${seg(I[1], O[1])}
     ${seg(I[2], O[2])}
@@ -286,18 +325,15 @@ const I = [
     ${seg(I[6], O[6])}
     ${seg(I[7], O[7])}
 
-    
-
-    <!-- 数字（囲い無し）※位置は必要なら後で微調整できます -->
-    ${svgCell(25,25,b.NW)}
-    ${svgCell(50,18,b.N)}
-    ${svgCell(75,25,b.NE)}
-    ${svgCell(18,50,b.W)}
+    ${svgCell(25,25,b.SE)}
+    ${svgCell(50,18,b.S)}
+    ${svgCell(75,25,b.SW)}
+    ${svgCell(18,50,b.E)}
     ${svgCell(50,50,b.C,true)}
-    ${svgCell(82,50,b.E)}
-    ${svgCell(25,75,b.SW)}
-    ${svgCell(50,82,b.S)}
-    ${svgCell(75,75,b.SE)}
+    ${svgCell(82,50,b.W)}
+    ${svgCell(25,75,b.NE)}
+    ${svgCell(50,82,b.N)}
+    ${svgCell(75,75,b.NW)}
   </svg>`;
 }
 
@@ -305,11 +341,20 @@ function seg(a, b){
   return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#111111" stroke-width="2" />`;
 }
 
+function findDirOfNumber(board, num){
+  const entries = Object.entries(board).filter(([k]) => k !== "C");
+  const hit = entries.find(([,v]) => v === num);
+  return hit ? hit[0] : null;
+}
 
+function oppositeDir(dir){
+  const opp = { N:"S", NE:"SW", E:"W", SE:"NW", S:"N", SW:"NE", W:"E", NW:"SE" };
+  return opp[dir] ?? null;
+}
 
 function svgCell(x,y,val,isCenter=false){
   const textFill = isCenter ? "#b8860b" : "#111827";
-  const fontSize = isCenter ? 15 : 13;   // ← 数字を大きく
+  const fontSize = isCenter ? 15 : 13;
 
   return `
     <text
@@ -323,7 +368,6 @@ function svgCell(x,y,val,isCenter=false){
     >${val}</text>
   `;
 }
-
 
 /* ========= 日盤計算（2026年専用）ここから ========= */
 
@@ -357,18 +401,14 @@ function centerStar2026(date){
   return mod9(9 - diffDays(d, yangAnchor));
 }
 
-// 飛泊順
+// 飛泊順（固定）：中→NW→W→NE→S→N→SW→E→SE
 const ORDER = ["C","NW","W","NE","S","N","SW","E","SE"];
 
-// ミニ日盤（3×3）
 function makeNichiban2026(date){
   const d = new Date(date); d.setHours(0,0,0,0);
   const center = centerStar2026(d);
 
-  const isYin =
-    d >= new Date(2026,5,19) && d <= new Date(2026,11,15);
-
-  const step = isYin ? -1 : +1;
+  const step = +1;
 
   const b = { C: center };
   for (let i=1; i<ORDER.length; i++){
@@ -383,4 +423,3 @@ function makeNichiban2026(date){
 }
 
 /* ========= 日盤計算 ここまで ========= */
-
