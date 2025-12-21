@@ -288,3 +288,186 @@ dialog{
   font-size: 13px;
   font-weight: 900;
 }
+
+.dayCell.empty{
+  visibility: hidden;   /* 枠を残して中身だけ見えなくする */
+  pointer-events: none;
+}
+
+/* 曜日ヘッダー */
+.dowCell{
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* 土日だけ色を少し変える（任意） */
+.dowCell:nth-child(6){ color: rgba(120,200,255,0.9); } /* 土 */
+.dowCell:nth-child(7){ color: rgba(255,170,170,0.9); } /* 日 */
+
+/* 画面全体を左寄せ */
+.page,
+.container,
+.main,
+#app{
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  max-width: 1100px;        /* お好みで。大きすぎるなら 980px など */
+  padding-left: 18px;       /* 左の余白だけ確保 */
+  padding-right: 18px;
+}
+
+/* カレンダーグリッド自体も左寄せ */
+#calendar{
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap:12px;
+  justify-content: start;   /* ← これ重要 */
+}
+
+/* ===== PC表示だけ：横に広がりすぎるのを止めて左寄せ ===== */
+@media (min-width: 900px){
+
+  /* 画面全体（アプリ）を左寄せ＆最大幅を固定 */
+  #app{
+    max-width: 1120px;      /* ← 980〜1200で好みに調整OK */
+    margin: 0 auto 0 0;     /* ← 左寄せ */
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  /* カレンダーも同じ幅内で左寄せ */
+  #calendar{
+    width: 100%;
+    max-width: 1120px;
+    margin-left: 0;
+    margin-right: auto;
+    justify-content: start; /* ← 中身が中央に寄るのを防ぐ */
+  }
+
+  /* 曜日ヘッダー行も左寄せ */
+  .dow{
+    justify-self: start;
+  }
+}
+
+@media (min-width: 900px){
+  body{
+    max-width: 1120px;
+    margin: 0 auto 0 0;
+  }
+}
+
+@media (min-width: 900px){
+  #calendar{
+    gap: 14px; /* 今が大きいなら 10〜14くらいが綺麗 */
+  }
+}
+
+/* ===== PC表示：ヘッダー行を左寄せ＆幅固定 ===== */
+@media (min-width: 900px){
+  .top .row{
+    max-width: 1120px;     /* ← カレンダーと同じ幅 */
+    margin: 0 auto 0 0;    /* ← 左寄せ */
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+@media (min-width: 900px){
+
+  #calendar{
+    max-width: 1120px;
+    margin: 0 auto 0 0;   /* 左寄せ */
+    padding-left: 18px;
+    padding-right: 18px;
+
+    justify-content: start; /* 中央寄り防止 */
+  }
+
+}
+/* ===== PCだけ：左寄せ＆横に広がりすぎ防止 ===== */
+@media (min-width: 900px){
+  .wrap{
+    max-width: 980px;      /* ← 920だと窮屈なら1120、広いなら980でもOK */
+    margin: 0 auto 0 0;     /* ← 左寄せ（これが効く） */
+  }
+
+  /* カレンダー自体も左寄せにする（念のため） */
+  .calendar, #calendar{
+    justify-content: start;
+    margin-left: 0;
+  }
+}
+@media (min-width: 900px){
+  .dowCell{
+    justify-self: stretch;
+    text-align: center;
+  }
+}
+/* ===== 年盤・月盤（ホーム上部） ===== */
+.topBoards{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 12px 0 14px;
+}
+
+@media (min-width: 900px){
+  .topBoards{
+    grid-template-columns: 1fr 1fr; /* PCは横2枚 */
+    align-items: start;
+  }
+}
+
+.boardCard{
+  background: rgba(10,20,35,.55);
+  border: 1px solid rgba(148,163,184,.22);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset;
+}
+
+.boardCardHead{
+  display:flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.boardTitle{
+  font-weight: 700;
+  color: #e5e7eb;
+  letter-spacing: .02em;
+}
+
+.boardMeta{
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.boardBody{
+  display:flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* 盤の大きさ（必要なら調整） */
+.topBoards .oct-svg{
+  width: 120px;
+  height: 120px;
+  flex: 0 0 auto;
+}
+
+.boardText{
+  flex: 1;
+  min-width: 0;
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.55;
+}

@@ -4,6 +4,7 @@ const titleEl = $("title");
 const subtitleEl = $("subtitle");
 const calendarEl = $("calendar");
 const detailEl = $("detail");
+const topBoardsEl = $("topBoards");
 
 const honmeiSelect = $("honmeiSelect");
 const monthInput = $("monthInput");
@@ -42,6 +43,117 @@ const PALACE_BASE_SCORE = {
   "艮": 45,
   "離": 75,
 };
+
+// 宮（八卦）→ 方位キー（SVG用）
+const PALACE_TO_DIR = {
+  "坎": "N",
+  "艮": "NE",
+  "震": "E",
+  "巽": "SE",
+  "離": "S",
+  "坤": "SW",
+  "兌": "W",
+  "乾": "NW",
+};
+
+// 方位キー → 宮（八卦）
+const DIR_TO_PALACE = {
+  N: "坎",
+  NE: "艮",
+  E: "震",
+  SE: "巽",
+  S: "離",
+  SW: "坤",
+  W: "兌",
+  NW: "乾",
+  C: "中",
+};
+
+// ===== 年盤中宮星（立春基準・暫定）=====
+const yearCenterStar = {
+  2024: 3,
+  2025: 2,
+  2026: 1,
+  2027: 9,
+  2028: 8,
+  2029: 7,
+  2030: 6,
+  2031: 5,
+  2032: 4
+};
+
+// ===== 年盤生成（洛書ベースで回転）=====
+function createYearBoard(year) {
+  const center = yearCenterStar[year];
+  if (!center) return null;
+
+  // 洛書（5が中宮の基準配列）
+  // grid の並び：左上→右下（上段=南側）を想定
+  // [SE,S,SW, E,C,W, NE,N,NW]
+  const loshu = [4,9,2,3,5,7,8,1,6];
+  const diff = center - 5;
+
+  const grid = loshu.map(n => {
+    let v = n + diff;
+    if (v > 9) v -= 9;
+    if (v < 1) v += 9;
+    return v;
+  });
+
+  return { center, grid, goh: "NE", anken: "SW" };
+}
+
+// 盤（N/NE/…/C）から指定の星がいる方位を返す
+function findDirOfStar(board, star){
+  const hit = Object.entries(board).find(([k,v]) => v === star);
+  return hit ? hit[0] : null;
+}
+
+// 日盤から「その日の宮」を自動算出（本命星の位置）
+function inferPalaceFromNichiban(board, honmei){
+  const dir = findDirOfStar(board, honmei) || "C";
+  return DIR_TO_PALACE[dir] || "中";
+}
+
+// 日盤から「注意日（暗剣殺）」を自動算出
+function inferDayWarningsFromNichiban(board, honmei){
+  const warnings = [];
+
+  const honmeiDir = findDirOfStar(board, honmei);
+  const gohDir    = findDirOfStar(board, 5);
+  const ankenDir  = oppositeDir(gohDir);
+
+  if (honmeiDir && ankenDir && honmeiDir === ankenDir) {
+    warnings.push("暗剣殺");
+  }
+  return warnings;
+}
+
+
+// ===== 節入り日（2026年用）=====
+const SETSUIRI_DAY = {
+  1: 5,
+  2: 4,
+  3: 5,
+  4: 5,
+  5: 5,
+  6: 6,
+  7: 7,
+  8: 7,
+  9: 7,
+  10: 8,
+  11: 7,
+  12: 7
+};
+
+// 指定年月の「節入り後の日付文字列」を返す
+function getAfterSetsuiriDate(yyyy, mm){
+  const d = SETSUIRI_DAY[mm] ?? 5;
+  const mmStr = String(mm).padStart(2,"0");
+  const ddStr = String(d).padStart(2,"0");
+  return `${yyyy}-${mmStr}-${ddStr}`;
+}
+
 
 function calcDayScore(palace, dayWarnings = []) {
   let score = PALACE_BASE_SCORE[palace] ?? 50;
@@ -138,70 +250,215 @@ function dayState(dayScore, dayWarnings){
 function renderMonth(){
   const [yyyyStr, mmStr] = currentMonth.split("-");
   const yyyy = Number(yyyyStr);
-  const mm = Number(mmStr);
+  const mm   = Number(mmStr);
+
+  // ★ 月盤カードは「節入り後」を固定参照（例：2026-01 → 2026-01-05）
+  const monthAfterDate  = getAfterSetsuiriDate(yyyy, mm);
+  const monthBlockAfter = findMonthBlock(monthAfterDate);
 
   titleEl.textContent = `${yyyy}年${mm}月`;
-  // 説明は不要なので空に（CSSでも非表示にします）
   if(subtitleEl) subtitleEl.textContent = "";
 
-  calendarEl.innerHTML = "";
+  renderTopBoards();
 
-  const maxDay = daysInMonth(yyyy, mm);
+  function renderTopBoards(){
+    // 月盤（節入り後）
+    const mBlock = monthBlockAfter;
 
-  for(let d=1; d<=maxDay; d++){
-    const dateStr = `${yyyyStr}-${mmStr}-${String(d).padStart(2,"0")}`;
- const dayObj = data.days[dateStr] ?? {};
-const dayWarnings = dayObj.dayWarnings ?? [];
+    // 年盤：その「節入り後の日付」が属する年ブロック（=2025年でOK）
+    const yBlock = findYearBlock(monthAfterDate);
 
-// ★ 月盤の五黄殺・暗剣殺（盤の薄緑表示専用）
-const monthBlock = findMonthBlock(dateStr);
-const monthGohPalace   = monthBlock?.board?.marks?.gohosatsuPalace ?? null;
-const monthAnkenPalace = monthBlock?.board?.marks?.ankensatsuPalace ?? null;
+    function jpDate(iso){
+      const [y,m,d] = iso.split("-");
+      return `${Number(y)}年${Number(m)}月${Number(d)}日`;
+    }
+    // ★ 年盤タイトルに「〜まで」を付ける
+    const yearTitle = `年盤（${yBlock?.id ?? "—"}年）（${jpDate(yBlock?.range?.end ?? "2026-02-03")}まで）`;
+    const monthTitle = `月盤（${mBlock?.label ?? "—"}）`;
 
-// 日盤宮（JSONの palace を使う）
-const palace = dayObj.palace ?? "中"; // 念のため
+    // 年運メッセージは短めに
+    const shortText = (s, max=70) => {
+      if(!s) return "";
+      const one = String(s).replace(/\s+/g," ").trim();
+      return one.length > max ? one.slice(0, max) + "…" : one;
+    };
 
-// ★ 由依ルールで「日点数」を計算
-const dayScore = calcDayScore(palace, dayWarnings);
+    // JSON の grid 配列を、SVG が期待する方位キーに変換（上=南の九星盤表示に合わせる）
+    // grid の並び：左上→右下（上段=南側）を想定
+    // [SE,S,SW, E,C,W, NE,N,NW]
+    const toBoardObj = (grid) => ({
+      SE: grid[0], S: grid[1], SW: grid[2],
+      E:  grid[3], C: grid[4], W:  grid[5],
+      NE: grid[6], N: grid[7], NW: grid[8],
+    });
 
-// 状態（行動/整え/注意）
-const state = dayState(dayScore, dayWarnings);
+    // 宮 → 方位(dir) 変換（SVG用）
+    const palaceToDir = {
+      "坎": "N",
+      "艮": "NE",
+      "震": "E",
+      "巽": "SE",
+      "離": "S",
+      "坤": "SW",
+      "兌": "W",
+      "乾": "NW",
+    };
 
-// ★ 日盤（2026年用）を作る
-const dateObj = new Date(yyyy, mm - 1, d);
-const board = makeNichiban2026(dateObj);
+    const yGrid = yBlock?.board?.grid || null;
 
-// 凶マーク（ア or 破 のみ / 日盤のみ）
-const hasAn = dayWarnings.includes("暗剣殺");
-const hasHa = dayWarnings.includes("日破");
+const yearBoard = createYearBoard(yBlock?.id);
+
+const yearBoardSvg =
+  yearBoard?.grid
+    ? toBoardObj(yearBoard.grid)
+    : null;
+
+    const mGrid = mBlock?.board?.grid || null;
+
+    const yearHtml = `
+      <div class="boardCard">
+        <div class="boardCardHead">
+          <div class="boardTitle">${yearTitle}</div>
+          <div class="boardMeta">${yBlock?.fortuneName ?? ""} / ${yBlock?.score ?? ""}</div>
+        </div>
+        <div class="boardBody">
+
+       ${
+  yearBoardSvg
+    ? `
+      <div class="yearBoard" style="--bad-fill: rgba(170, 130, 165, 0.75);">
+        ${boardSvg(yearBoardSvg, "NE", "SW", false)}
+      </div>
+    `
+    : `<div class="boardText">年盤データが生成できません</div>`
+}
 
 
-    const cell = document.createElement("div");
-    cell.className = `dayCell state-${state}`;
-
-const mark = hasAn ? "ア" : (hasHa ? "破" : "");
-
-    cell.innerHTML = `
-<div class="topRow">
-  <div class="topLeft">
-    <div class="dayNum">${d}</div>
-    ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
-    <div class="stateBadge">${state}</div>
-  </div>
-  <div class="scoreNum">${dayScore}</div>
-</div>
-
-    <div class="oct-board">${boardSvg(board, monthGohPalace, monthAnkenPalace)}</div>
-
-      <div class="badRow">
-        ${hasAn ? `<span class="badge blue">ア</span>` : ``}
-        ${hasHa ? `<span class="badge blue">破</span>` : ``}
+          <div class="boardText">${shortText(yBlock?.message ?? "", 70)}</div>
+        </div>
       </div>
     `;
 
-    cell.addEventListener("click", () => openDetail(dateStr));
-    calendarEl.appendChild(cell);
+    // 月盤の凶方位（五黄殺・暗剣殺）を「方位キー」に変換（薄緑表示用）
+    const monthMarks = mBlock?.board?.marks || {};
+    const monthGohDir   = palaceToDir[monthMarks.gohosatsuPalace]   || null;
+    const monthAnkenDir = palaceToDir[monthMarks.ankensatsuPalace] || null;
+
+    const monthHtml = `
+      <div class="boardCard">
+        <div class="boardCardHead">
+          <div class="boardTitle">${monthTitle}</div>
+          <div class="boardMeta">${mBlock?.fortuneName ?? ""} / ${mBlock?.score ?? ""}</div>
+        </div>
+        <div class="boardBody">
+          ${
+            mGrid
+              ? boardSvg(toBoardObj(mGrid), monthGohDir, monthAnkenDir, false)
+              : `<div class="boardText">※月盤データが見つかりません</div>`
+          }
+          <div class="boardText">
+            ${mBlock?.message?.good?.[0] ?? ""}<br>
+            ${mBlock?.message?.caution?.[0] ?? ""}
+          </div>
+        </div>
+      </div>
+    `;
+
+    topBoardsEl.innerHTML = yearHtml + monthHtml;
   }
+
+  // ここから下は「日マス描画」なのでそのまま
+  calendarEl.innerHTML = "";
+
+// 曜日ヘッダー（月曜始まり）
+const dow = ["月","火","水","木","金","土","日"];
+dow.forEach(t => {
+  const h = document.createElement("div");
+  h.className = "dowCell";
+  h.textContent = t;
+  calendarEl.appendChild(h);
+});
+
+  const maxDay = daysInMonth(yyyy, mm);
+
+// ===== 月曜始まり：月初の空白マスを入れる =====
+const firstDate = new Date(yyyy, mm - 1, 1);
+// getDay(): 日0 月1 火2 水3 木4 金5 土6
+// 月曜始まりに変換（月=0, 火=1 ... 日=6）
+const lead = (firstDate.getDay() + 6) % 7;
+
+for(let i = 0; i < lead; i++){
+  const empty = document.createElement("div");
+  empty.className = "dayCell empty";
+  calendarEl.appendChild(empty);
+}
+
+
+for (let d = 1; d <= maxDay; d++) {
+
+  // ① 日付文字列
+  const dateStr = `${yyyyStr}-${mmStr}-${String(d).padStart(2,"0")}`;
+
+  // ② 日盤
+  const dateObj = new Date(yyyy, mm - 1, d);
+  const board = makeNichiban2026(dateObj);
+  // ③ JSON（日データ）
+  const dayObj = data.days[dateStr] ?? {};
+
+  // ④ 自動判定
+  const autoPalace   = inferPalaceFromNichiban(board, currentHonmei);
+  const autoWarnings = inferDayWarningsFromNichiban(board, currentHonmei);
+
+  // ⑤ JSON優先
+  const palace      = dayObj.palace ?? autoPalace;
+  const dayWarnings = dayObj.dayWarnings ?? autoWarnings;
+
+  // ⑥ 点数・状態
+  const dayScore = calcDayScore(palace, dayWarnings);
+  const state    = dayState(dayScore, dayWarnings);
+
+  const hasAn = dayWarnings.includes("暗剣殺");
+  const hasHa = dayWarnings.includes("日破");
+
+  // ★ 月盤の五黄殺・暗剣殺（薄緑表示用：その日の月盤から取得）
+  const mBlock2 = findMonthBlock(dateStr);
+  const mMarks2 = mBlock2?.board?.marks || {};
+  const monthGohDir   = PALACE_TO_DIR[mMarks2.gohosatsuPalace] || null;
+  const monthAnkenDir = PALACE_TO_DIR[mMarks2.ankensatsuPalace] || null;
+
+  // ★★★★★ ⑦ ここで cell を作る（これが無いとエラー）
+  const cell = document.createElement("div");
+  cell.className = `dayCell state-${state}`;
+
+  // ⑧ HTML を入れる
+  cell.innerHTML = `
+    <div class="topRow">
+      <div class="topLeft">
+        <div class="dayNum">${d}</div>
+        ${hasAn ? `<span class="kyoMini">ア</span>` : ``}
+        ${hasHa ? `<span class="kyoMini">破</span>` : ``}
+        <div class="stateBadge">${state}</div>
+      </div>
+      <div class="scoreNum">${dayScore}</div>
+    </div>
+
+    <div class="oct-board">
+      ${boardSvg(board, monthGohDir, monthAnkenDir)}
+    </div>
+
+    <div class="badRow">
+      ${hasAn ? `<span class="badge blue">ア</span>` : ``}
+      ${hasHa ? `<span class="badge blue">破</span>` : ``}
+    </div>
+  `;
+
+  // ⑨ クリックイベント
+  cell.addEventListener("click", () => openDetail(dateStr));
+
+  // ⑩ カレンダーに追加
+  calendarEl.appendChild(cell);
+}
+
 }
 
 function pickOneLine(dateStr){
@@ -209,8 +466,9 @@ function pickOneLine(dateStr){
   const dayObj = data.days[dateStr] ?? {};
   const monthBlock = findMonthBlock(dateStr);
 // ★ 月盤の五黄殺・暗剣殺（盤表示専用）
-const monthGohPalace   = monthBlock?.board?.marks?.gohosatsuPalace ?? null;
-const monthAnkenPalace = monthBlock?.board?.marks?.ankensatsuPalace ?? null;
+const monthMarks = monthBlock?.board?.marks || {};
+const monthGohDir   = PALACE_TO_DIR[monthMarks.gohosatsuPalace] || null;
+const monthAnkenDir = PALACE_TO_DIR[monthMarks.ankensatsuPalace] || null;
 
   if(!monthBlock) return "";
 
@@ -274,7 +532,7 @@ boot().catch(err => {
 
 /* ===== 八角形ミニ日盤（SVG） ===== */
 
-function boardSvg(b, monthGohPalace, monthAnkenPalace){
+function boardSvg(b, monthGohPalace, monthAnkenPalace, showDayBad = true){
   // 外側八角形（頂点）
   const O = [
     [30, 6],[70, 6],[94, 30],[94, 70],[70, 94],[30, 94],[6, 70],[6, 30],
@@ -308,32 +566,30 @@ function boardSvg(b, monthGohPalace, monthAnkenPalace){
   const monthGohSeg   = monthGohPalace   ? palaceToSeg[monthGohPalace]   : null;
   const monthAnkenSeg = monthAnkenPalace ? palaceToSeg[monthAnkenPalace] : null;
 
-  function trapezoid(i){
-    const i2 = (i + 1) % 8;
-    const dir = dirByIdx[i];
+function trapezoid(i, extraClass){
+  const i2 = (i + 1) % 8;
 
-    // 日盤（水色）判定
-    const isDayGoh   = (gohDir === dir);
-    const isDayAnken = (ankenDir === dir);
+  const dirByIdx = ["N","NE","E","SE","S","SW","W","NW"];
+  const dir = dirByIdx[i];
 
-    // 月盤（薄緑）判定
-    const isMonthBad = (i === monthGohSeg) || (i === monthAnkenSeg);
+  const isMonthBad = (dir === monthGohPalace) || (dir === monthAnkenPalace);
+  const isDayBad   = showDayBad && ((dir === gohDir) || (dir === ankenDir));
 
-    // 塗り（優先：日盤水色 → 月盤薄緑 → 透明）
-    let fill = "transparent";
-    if (isDayGoh || isDayAnken) {
-      fill = "rgba(135, 206, 250, 0.35)";     // 水色
-    } else if (isMonthBad) {
-      fill = "rgba(180, 235, 180, 0.35)";     // 薄緑
-    }
-
-    return `<polygon class="trap"
-      style="fill:${fill};"
-      points="${I[i][0]},${I[i][1]}
-              ${I[i2][0]},${I[i2][1]}
-              ${O[i2][0]},${O[i2][1]}
-              ${O[i][0]},${O[i][1]}" />`;
+  // 優先：日盤（水色） > 月盤（薄緑） > なし
+  let fill = "transparent";
+  if (isDayBad) {
+    fill = "rgba(135, 206, 250, 0.35)";      // 水色
+  } else if (isMonthBad) {
+   fill = "var(--bad-fill, rgba(180, 235, 180, 0.35))";
+   // 薄緑
   }
+
+  const cls = `trap${extraClass ? " " + extraClass : ""}`;
+  return `<polygon class="${cls}"
+    style="fill:${fill}"
+    points="${I[i][0]},${I[i][1]} ${I[i2][0]},${I[i2][1]} ${O[i2][0]},${O[i2][1]} ${O[i][0]},${O[i][1]}" />`;
+}
+
 
   function seg(a, c){
     return `<line x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}"
