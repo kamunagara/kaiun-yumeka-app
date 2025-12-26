@@ -478,14 +478,21 @@ memoEl?.addEventListener("input", () => {
 
 // ===== データ読み込み =====
 async function loadHonmei(honmei){
-  const embedded = document.getElementById("honmeiData");
-  if (embedded && embedded.textContent.trim().startsWith("{")) {
-    data = JSON.parse(embedded.textContent);
-    return;
+  const h = Number(honmei);
+  const url = `./data/honmei_${h}.json`;
+
+  let res;
+  try{
+    res = await fetch(url, { cache: "no-store" });
+  }catch(e){
+    throw new Error(`データ取得に失敗しました（通信/パス）: ${url}
+${e?.message ?? e}`);
   }
-  const url = `data/2026/honmei-${honmei}.json`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error(`データが読めません: ${url}`);
+
+  if(!res.ok){
+    throw new Error(`データが読めません: ${url}（HTTP ${res.status}）`);
+  }
+
   data = await res.json();
 }
 
