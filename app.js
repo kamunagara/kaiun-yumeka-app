@@ -129,8 +129,8 @@ const PALACE_BASE_SCORE = {
 // ===== 方位 ⇄ 宮 変換（九星気学の標準方位）=====
 const DIR_TO_PALACE = { N:"坎", NE:"艮", E:"震", SE:"巽", S:"離", SW:"坤", W:"兌", NW:"乾", C:"中" };
 // ハイライト色
-const DAY_BAD_BLUE    = "rgba(120, 200, 255, 0.28)";
-const MONTH_BAD_GREEN = "rgba(170, 255, 170, 0.28)";
+const DAY_BAD_BLUE    = "rgba(135, 206, 250, 0.35)";
+const MONTH_BAD_GREEN = "rgba(180, 235, 180, 0.35)";
 const YEAR_BAD_PURPLE = "rgba(170, 120, 255, 0.35)";
 
 const PALACE_TO_DIR = { "坎":"N","艮":"NE","震":"E","巽":"SE","離":"S","坤":"SW","兌":"W","乾":"NW","中":"C" };
@@ -1141,10 +1141,25 @@ function renderMonth(){
     const state = dayState(dayScore, dayWarnings);
 
     // 月盤の薄緑（その日が属する月盤）
+    // 重要：marks の片方だけが欠けている月があるため、基本は「月盤gridの5→五黄殺／その反対→暗剣殺」で算出する。
     const monthBlock = findMonthBlock(dateStr);
     const monthMarks = monthBlock?.board?.marks || {};
-    const monthGohDir   = monthMarks.gohosatsuPalace ? (PALACE_TO_DIR[monthMarks.gohosatsuPalace] || null) : null;
-    const monthAnkenDir = monthMarks.ankensatsuPalace ? (PALACE_TO_DIR[monthMarks.ankensatsuPalace] || null) : null;
+
+    let monthGohDir = null;
+    let monthAnkenDir = null;
+
+    const mGrid = monthBlock?.board?.grid;
+    if (Array.isArray(mGrid) && mGrid.length === 9) {
+      const mBoardObj = gridToBoardObj(mGrid);
+      monthGohDir = findDirOfStar(mBoardObj, 5);
+      monthAnkenDir = oppositeDir(monthGohDir);
+    } else {
+      // fallback: marks から（表記ゆれを吸収）
+      const gohPal = normPalace(monthMarks.gohosatsuPalace);
+      const ankenPal = normPalace(monthMarks.ankensatsuPalace);
+      monthGohDir = gohPal ? (PALACE_TO_DIR[gohPal] || null) : null;
+      monthAnkenDir = ankenPal ? (PALACE_TO_DIR[ankenPal] || null) : null;
+    }
 
     const hasAn = dayWarnings.includes("暗剣殺");
     const hasHa = dayWarnings.includes("日破");
@@ -1329,7 +1344,7 @@ function boardSvg(b, badDir1, badDir2, showDayBad = true, badFill = "rgba(180, 2
 
     // 優先：日盤（水色） > 月盤（薄緑）
     let fill = "transparent";
-    if(isDayBad) fill = "rgba(135, 206, 250, 0.35)";
+    if(isDayBad) fill = DAY_BAD_BLUE;
     else if(isMonthBad) fill = badFill;
 
     return `<polygon class="trap" style="fill:${fill}"
