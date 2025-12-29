@@ -27,13 +27,11 @@
   "monthBlocks": [
     {
       "id": "2025-12",
-      "label": "2025年12月（節入り）",
+      "label": "2025年12月",
       "range": {
         "start": "2025-12-05",
         "end": "2026-01-04"
       },
-      "fortuneName": "静観運",
-      "score": 55,
       "goodGods": [
         "坎",
         "乾",
@@ -54,10 +52,7 @@
           6,
           2
         ],
-        "marks": {
-          "gohosatsuPalace": "離",
-          "ankensatsuPalace": "坎"
-        }
+        "marks": {}
       },
       "message": {
         "good": [
@@ -74,13 +69,12 @@
     },
     {
       "id": "2026-01",
-      "label": "2026年1月（節入り）",
+      "label": "2026年1月",
+"kichiDirs": ["NE","E"],
       "range": {
         "start": "2026-01-05",
         "end": "2026-02-03"
       },
-      "fortuneName": "強運",
-      "score": 55,
       "goodGods": [
         "震"
       ],
@@ -100,10 +94,9 @@
           1
         ],
         "marks": {
-          "gohosatsuPalace": "坎",
           "ankensatsuPalace": "離",
-          "haPalace": "乾",
-          "haType": "歳破"
+          "haType": "月破",
+          "haPalace": "坤"
         }
       },
       "message": {
@@ -117,6 +110,340 @@
           "プライドや上から目線を避ける（謙虚さ）",
           "約束・契約・ルールの軽視に注意（細部まで確認）"
         ]
+      }
+    },
+    {
+      "id": "2026-02",
+      "label": "2026年2月",
+      "kichiDirs": ["S","N","SE"],
+      "goodGods": [
+        "坎",
+        "兌"
+      ],
+      "tendo": [
+        "離"
+      ],
+      "board": {
+        "grid": [
+          7,
+          3,
+          5,
+          6,
+          8,
+          1,
+          2,
+          4,
+          9
+        ],
+        "marks": {
+          "ankensatsuPalace": "艮",
+          "haType": "月破",
+          "haPalace": "坤"
+        }
+      }
+    },
+    {
+      "id": "2026-03",
+      "label": "2026年3月",
+"kichiDirs": ["N","SE"],
+
+      "goodGods": [
+        "震",
+        "兌",
+        "艮",
+        "離"
+      ],
+      "tendo": [
+        "坤"
+      ],
+      "board": {
+        "grid": [
+          6,
+          2,
+          4,
+          5,
+          7,
+          9,
+          1,
+          3,
+          8
+        ],
+        "marks": {
+          "ankensatsuPalace": "兌",
+          "haType": "月破",
+          "haPalace": "兌"
+        }
+      }
+    },
+    {
+      "id": "2026-04",
+      "label": "2026年4月",
+"kichiDirs": ["E","SW"],
+      "goodGods": [
+        "離"
+      ],
+      "tendo": [
+        "坎"
+      ],
+      "board": {
+        "grid": [
+          5,
+          1,
+          3,
+          4,
+          6,
+          8,
+          9,
+          2,
+          7
+        ],
+        "marks": {
+          "ankensatsuPalace": "乾",
+          "haType": "月破",
+          "haPalace": "乾"
+        }
+      }
+    },
+    {
+      "id": "2026-05",
+      "label": "2026年5月",
+"kichiDirs": ["E","W","SE"],
+      "goodGods": [
+        "震",
+        "離"
+      ],
+      "tendo": [
+        "兌"
+      ],
+      "board": {
+        "grid": [
+          4,
+          9,
+          2,
+          3,
+          5,
+          7,
+          8,
+          1,
+          6
+        ],
+        "marks": {
+          "haType": "月破",
+          "haPalace": "乾"
+        }
+      }
+    },
+    {
+      "id": "2026-06",
+      "label": "2026年6月",
+"kichiDirs": ["W"],
+      "goodGods": [
+        "坎",
+        "巽",
+        "兌",
+        "離"
+      ],
+      "tendo": [
+        "乾"
+      ],
+      "board": {
+        "grid": [
+          3,
+          8,
+          1,
+          2,
+          4,
+          6,
+          7,
+          9,
+          5
+        ],
+        "marks": {
+          "ankensatsuPalace": "巽",
+          "haType": "月破",
+          "haPalace": "坎"
+        }
+      }
+    },
+    {
+      "id": "2026-07",
+      "label": "2026年7月",
+"kichiDirs": ["S","NW"],
+      "goodGods": [
+        "兌",
+        "離"
+      ],
+      "tendo": [
+        "震"
+      ],
+      "board": {
+        "grid": [
+          2,
+          7,
+          9,
+          1,
+          3,
+          5,
+          6,
+          8,
+          4
+        ],
+        "marks": {
+          "ankensatsuPalace": "震",
+          "haType": "月破",
+          "haPalace": "艮"
+        }
+      }
+    },
+    {
+      "id": "2026-08",
+      "label": "2026年8月",
+"kichiDirs": ["S","N","W"],
+      "goodGods": [
+        "離"
+      ],
+      "tendo": [
+        "坎"
+      ],
+      "board": {
+        "grid": [
+          1,
+          6,
+          8,
+          9,
+          2,
+          4,
+          5,
+          7,
+          3
+        ],
+        "marks": {
+        "ankensatsuPalace": "坤",
+          "haType": "月破",
+          "haPalace": "艮"
+        }
+      }
+    },
+    {
+      "id": "2026-09",
+      "label": "2026年9月",
+"kichiDirs": ["W","NE","SW"],
+      "goodGods": [
+        "坤",
+        "震",
+        "兌"
+      ],
+      "tendo": [
+        "艮"
+      ],
+      "board": {
+        "grid": [
+          9,
+          5,
+          7,
+          8,
+          1,
+          3,
+          4,
+          6,
+          2
+        ],
+        "marks": {
+          "ankensatsuPalace": "坎",
+          "haType": "月破",
+          "haPalace": "震"
+        }
+      }
+    },
+    {
+      "id": "2026-10",
+      "label": "2026年10月",
+"kichiDirs": ["E","NE","SW"],
+      "goodGods": [
+        "坎",
+        "兌"
+      ],
+      "tendo": [
+        "離"
+      ],
+      "board": {
+        "grid": [
+          8,
+          4,
+          6,
+          7,
+          9,
+          2,
+          3,
+          5,
+          1
+        ],
+        "marks": {
+          "ankensatsuPalace": "離",
+          "haType": "月破",
+          "haPalace": "巽"
+        }
+      }
+    },
+    {
+      "id": "2026-11",
+      "label": "2026年11月",
+"kichiDirs": ["S","E","N"],
+      "goodGods": [
+        "兌",
+        "離"
+      ],
+      "tendo": [
+        "震"
+      ],
+      "board": {
+        "grid": [
+          7,
+          3,
+          5,
+          6,
+          8,
+          1,
+          2,
+          4,
+          9
+        ],
+        "marks": {
+          "ankensatsuPalace": "艮",
+          "haType": "月破",
+          "haPalace": "巽"
+        }
+      }
+    },
+    {
+      "id": "2026-12",
+      "label": "2026年12月",
+      "kichiDirs": ["SE","N"],
+      "goodGods": [
+        "坎",
+        "乾",
+        "離"
+      ],
+      "tendo": [
+        "巽"
+      ],
+      "board": {
+        "grid": [
+          6,
+          2,
+          4,
+          5,
+          7,
+          9,
+          1,
+          3,
+          8
+        ],
+        "marks": {
+          "ankensatsuPalace": "兌",
+          "haType": "月破",
+          "haPalace": "離"
+        }
       }
     }
   ],

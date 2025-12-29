@@ -1,6 +1,21 @@
 
 // グリッド配列（NW,N,NE,W,C,E,SW,S,SE）のindex→宮
 const IDX_TO_PALACE = ["乾","坎","艮","兌","中","震","坤","離","巽"];
+// このアプリの盤表示は「南が上（離が上）」で描画しているため、月盤の宮⇔配列index対応は下記。
+// （配列順は [左上,上,右上,左,中,右,左下,下,右下]）
+const IDX_TO_PALACE_SOUTH_TOP = ["巽","離","坤","震","中","兌","艮","坎","乾"];
+
+// 宮の向かい側（反対方位）
+const OPPOSITE_PALACE = { "乾":"坤","坤":"乾","坎":"離","離":"坎","震":"兌","兌":"震","艮":"巽","巽":"艮","中":"中" };
+
+// 月盤用：指定した星が入っている「宮」を返す（南が上）
+function palaceOfStarMonth(grid, star){
+  if (!Array.isArray(grid)) return null;
+  const s = Number(star);
+  const idx = grid.map(Number).indexOf(s);
+  return (idx>=0) ? IDX_TO_PALACE_SOUTH_TOP[idx] : null;
+}
+
 
 // 正規化：宮名の表記ゆれ（例： "坎宮", "坎 ", "中宮"）を吸収
 function normPalace(p){
@@ -57,6 +72,8 @@ const dayScoreEl = $("dayScore");
 const dayBadEl = $("dayBad");
 const monthBadEl = $("monthBad");
 const oneLineEl = $("oneLine");
+// 日詳細の「吉方位（日）」表示
+const dayGoodDirEl = $("dayGoodDir");
 const memoEl = $("memo");
 
 const dialog = $("dialog");
@@ -67,6 +84,34 @@ const closeDialog = $("closeDialog");
 let data = null;
 let currentMonth = "2026-01";
 let currentHonmei = 1;
+
+// 年運「続きを読む」開閉状態（yearBlocksのidごとに保持）
+const YEAR_MORE_OPEN = Object.create(null);
+
+// 年運「続きを読む」：イベント委譲（描画し直しても必ず効く）
+if (topBoardsEl) {
+  topBoardsEl.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("button.readMoreBtn");
+    if (!btn) return;
+    const yid = btn.getAttribute("data-year-id") || "";
+    if (!yid) return;
+    YEAR_MORE_OPEN[yid] = !YEAR_MORE_OPEN[yid];
+    const [yy, mm] = String(currentMonth||"").split("-");
+    const yNum = Number(yy);
+    const mNum = Number(mm);
+    if (Number.isFinite(yNum) && Number.isFinite(mNum)) {
+      renderTopBoards(yNum, mNum);
+    } else {
+      // fallback: try read from monthSelect
+      const ms = document.getElementById("monthSelect");
+      const v = ms?.value || "";
+      const [y2, m2] = v.split("-");
+      const yN2 = Number(y2);
+      const mN2 = Number(m2);
+      if (Number.isFinite(yN2) && Number.isFinite(mN2)) renderTopBoards(yN2, mN2);
+    }
+  });
+}
 
 // ===== 日ごとの点数ルール（由依さん定義） =====
 const PALACE_BASE_SCORE = {
@@ -89,6 +134,9 @@ const MONTH_BAD_GREEN = "rgba(170, 255, 170, 0.28)";
 const YEAR_BAD_PURPLE = "rgba(170, 120, 255, 0.35)";
 
 const PALACE_TO_DIR = { "坎":"N","艮":"NE","震":"E","巽":"SE","離":"S","坤":"SW","兌":"W","乾":"NW","中":"C" };
+
+// 節入り日（毎月の節代わり日）
+const SETSUIRI_DAY_BY_MONTH = {1:5,2:4,3:5,4:5,5:5,6:6,7:7,8:7,9:7,10:8,11:7,12:7};
 
 function pad2(n){ return String(n).padStart(2,"0"); }
 function parseISO(iso){
@@ -185,28 +233,71 @@ function splitSentencesJa(msg){
 }
 
 // 1文目をテーマとして太字、残りは短く、全文はdetailsで表示
-function formatYearMessageSimple(msg){
-  const raw = String(msg || "");
-  const keyword = (raw.match(/キーワード[「『"]([^」』"]+)[」』"]/) || [])[1] || "";
+function formatYearMessageSimple(message, isExpanded, yearId = "") {
+  // ① キーワードを抽出して本文から除去（重複表示防止）
+  let keyword = "";
+  let body = (message || "").toString();
 
-  const sentences = splitSentencesJa(raw).filter(s => !s.includes("キーワード"));
+  // （キーワード：〇〇）形式も除去
+  body = body.replace(/（\s*キーワード[:：]\s*[^）]+）/g, "").trim();
+
+  // キーワード「〇〇」 / キーワード"〇〇" / キーワード『〇〇』
+  const km = body.match(/キーワード[「『"]([^」』"]+)[」』"]/);
+  if (km) {
+    keyword = (km[1] || "").trim();
+    body = body.replace(km[0], "").trim();
+  }
+
+  // 末尾の余計な句点・空白を整える
+  body = body.replace(/[\s　]+/g, " ").replace(/[。．\s　]*$/, "");
+
+  // ② 文章を「。」単位で分割（句点は後で戻す）
+  const sentences = body
+    .split("。")
+    .map(s => s.trim())
+    .filter(Boolean);
+
   const theme = sentences[0] || "";
-  const rest = sentences.slice(1);
+  const previewLines = sentences.slice(1, 3); // 2文ぶん（必要なら調整）
+  const remainingLines = sentences.slice(3);
 
-  // 2〜3行ぶん＝だいたい 2〜3文だけ表示（CSSで行数制限もかける）
-  const preview = rest.slice(0, 3).join("。");
+  const previewText = previewLines.length ? (previewLines.join("。") + "。") : "";
+  const remainingText = remainingLines.length ? (remainingLines.join("。") + "。") : "";
 
+  const hasMore = !!remainingText;
+
+  const themeHtml = theme
+    ? `<div class="yearTheme"><b>${escapeHtml(theme)}。</b></div>`
+    : "";
+
+  const previewHtml = previewText
+    ? `<div class="yearPreview">${escapeHtml(previewText)}</div>`
+    : "";
+
+  const moreBtnHtml = hasMore
+    ? `<button class="readMoreBtn" data-year-more="1" data-year-id="${escapeHtml(yearId)}" aria-expanded="${isExpanded ? "true" : "false"}">
+         ${isExpanded ? "▼ 続きを閉じる" : "▶ 続きを読む"}
+       </button>`
+    : "";
+
+  const moreHtml = (hasMore && isExpanded)
+    ? `<div class="yearMore">${escapeHtml(remainingText)}</div>`
+    : "";
+
+  const keywordHtml = keyword
+    ? `<div class="yearKeyword">（キーワード：${escapeHtml(keyword)}）</div>`
+    : "";
+
+  // ③ 表示：テーマ（太字）＋プレビュー（2〜3行想定）＋続きを読むで残りを展開
   return `
-    <div class="yearMsg">
-      ${theme ? `<div class="yearTheme"><strong>${escapeHtml(theme)}。</strong></div>` : ""}
-      ${preview ? `<div class="yearPreview">${escapeHtml(preview)}${preview.endsWith("。") ? "" : "。"}${keyword ? `（キーワード：${escapeHtml(keyword)}）` : ""}</div>` : ""}
-      <details class="yearMore">
-        <summary>続きを読む</summary>
-        <div class="yearFull">${escapeHtml(raw)}</div>
-      </details>
-    </div>
+    ${themeHtml}
+    ${previewHtml}
+    ${moreBtnHtml}
+    ${moreHtml}
+    ${keywordHtml}
   `;
 }
+
 
 // ===== 月運メッセージ（宮ごと共通）=====
 const MONTH_PALACE_MESSAGES = {
@@ -228,6 +319,108 @@ function getMonthPalaceMessage(palace){
 
 const DIR_LABEL_JP = {N:"北",NE:"北東",E:"東",SE:"東南",S:"南",SW:"南西",W:"西",NW:"北西",C:"中央"};
 
+
+const STAR_NAME_JP = {1:'一白水星',2:'二黒土星',3:'三碧木星',4:'四緑木星',5:'五黄土星',6:'六白金星',7:'七赤金星',8:'八白土星',9:'九紫火星'};
+function starNameJP(n){ return STAR_NAME_JP[Number(n)] || String(n); }
+// ===== 本命星ごとの吉数字（日盤：夢叶手帳ルール）=====
+// ※「中宮(中央)に入った数字は除外」→ 吉方位の抽出では C をそもそも見ない
+const GOOD_NUMS_BY_HONMEI = {
+  1: [3,4,6,7],
+  2: [6,7,8,9],
+  3: [1,4,9],
+  4: [1,3,9],
+  5: [2,6,7,8,9],
+  6: [1,2,7,8],
+  7: [1,2,6,8],
+  8: [2,6,7,9],
+  9: [2,3,4,8],
+};
+
+// ===== 年盤 吉方位（固定データ表示）=====
+// 2026年：一白水星のみ（立春前／立春後）
+// ※年盤は「計算」ではなく、確定データをそのまま表示（立春で切り替え）
+const YEAR_LUCKY_DIRECTIONS = {
+  "2026": {
+    1: { // 一白水星
+      preRisshun: ["西","北","南"],            // ～2026-02-03
+      postRisshun: ["南西","西","北東"]        // 2026-02-04～
+    }
+  }
+};
+function getYearLuckyDirs(yearNum, honmeiNum, dateStr){
+  const y = YEAR_LUCKY_DIRECTIONS?.[String(yearNum)]?.[Number(honmeiNum)];
+  if (!y) return [];
+  const before = (String(dateStr) <= "2026-02-03"); // 2026年の立春前判定
+  return before ? (y.preRisshun||[]) : (y.postRisshun||[]);
+}
+
+// 日破の「方位キー(N/NE/...)」を返す（※吉方位除外用：本命星に関係なく常に除外）
+function getNichihaDirByDate(dateObj){
+  const br = getBranchByDate(dateObj);
+  const brDir = BRANCH_TO_DIR[br];
+  return brDir ? oppositeDir(brDir) : null;
+}
+
+// 日盤(board: {N,NE,E,SE,S,SW,W,NW,C}) から吉方位を抽出
+// 除外：①中宮はそもそも対象外 ②本命星の向かい側 ③暗剣殺(=5の向かい) ④日破
+function getGoodDirsFromNichiban(board, honmei, haDir){
+  if(!board) return [];
+  const goodNums = new Set(GOOD_NUMS_BY_HONMEI[honmei] || []);
+  const DIRS_8 = ["N","NE","E","SE","S","SW","W","NW"]; // 中央は除外
+
+  const honmeiDir = findDirOfStar(board, honmei);
+  const excludeOpp = (honmeiDir && honmeiDir !== "C") ? oppositeDir(honmeiDir) : null;
+
+  const dir5 = findDirOfStar(board, 5);
+  const ankenDir = (dir5 && dir5 !== "C") ? oppositeDir(dir5) : null;
+
+  const out = [];
+  for(const dir of DIRS_8){
+    const num = board[dir];
+    if(!goodNums.has(num)) continue;
+    if(excludeOpp && dir === excludeOpp) continue;
+    if(ankenDir && dir === ankenDir) continue;
+    if(haDir && dir === haDir) continue;
+    out.push(dir);
+  }
+  return out;
+}
+
+// 月盤(board: {N,NE,E,SE,S,SW,W,NW,C}) から吉方位を抽出（ルールは日盤と同じ）
+// 除外：①中宮は対象外 ②本命星の向かい側 ③暗剣殺 ④五黄殺 ⑤月破
+function getGoodDirsFromGetsuban(board, honmei, monthMarks){
+  if(!board) return [];
+  const goodNums = new Set(GOOD_NUMS_BY_HONMEI[honmei] || []);
+  const DIRS_8 = ["N","NE","E","SE","S","SW","W","NW"]; // 中央は除外
+
+  const honmeiDir = findDirOfStar(board, honmei);
+  const excludeOpp = (honmeiDir && honmeiDir !== "C") ? oppositeDir(honmeiDir) : null;
+
+  const gohPal = monthMarks?.gohPalace || monthMarks?.gohosatsuPalace || null;
+  const ankenPal = monthMarks?.ankensatsuPalace || null;
+  const haPal = monthMarks?.haPalace || null;
+
+  const gohDir = gohPal ? (PALACE_TO_DIR[gohPal] || null) : null;
+  const haDir  = haPal  ? (PALACE_TO_DIR[haPal]  || null) : null;
+
+  // 五黄が中宮の月は暗剣殺なし
+  const ankenDir = (gohDir === "C") ? null : (ankenPal ? (PALACE_TO_DIR[ankenPal] || null) : null);
+
+  const out = [];
+  for (const dir of DIRS_8){
+    const n = Number(board[dir]);
+    if (!goodNums.has(n)) continue;
+    if (excludeOpp && dir === excludeOpp) continue;
+    if (ankenDir && dir === ankenDir) continue;
+    if (gohDir && dir === gohDir) continue;
+    if (haDir  && dir === haDir) continue;
+    out.push(dir);
+  }
+  return out;
+}
+
+
+
 // 夢叶手帳：月運点数（本命星ごとに 1〜12月）
 const MONTH_UNEI_SCORES = {
   1: [55,70,45,45,5,55,70,85,45,70,70,40], // 一白水星
@@ -247,6 +440,162 @@ const MONTH_UNEI_SCORES = {
 const MONTH_BADGE_DATA_2026 = {
   // "2026-01": { ankensatsu: false, gohosatsu: false, haType: "", tendo: [], goodGods: [] },
 };
+
+
+// ===== 月盤：天道・吉神・暗剣殺・五黄殺・破などの表示用 =====
+// 以前表示できていた情報を「月盤カード内」に復活させるためのHTMLブロック。
+// ===== 月盤：天道・吉神・暗剣殺・五黄殺・月破など（※宮名は出さない）=====
+// 仕様：
+// - 天道/吉神は「どの宮か」ではなく「その宮に入っている星」と「方位（西など）」を表示
+// - 天道と吉神は同じ横列、改行して暗剣殺/五黄殺/月破
+// - 五黄が中宮の月（五黄殺が中）では暗剣殺は表示しない
+function monthBadgeBlockHtml(mBlock, mGrid){
+  const marks = mBlock?.board?.marks ?? {};
+
+  // 配列/文字列どちらでも受け取れるように正規化
+  const toArr = (v) => {
+    if (Array.isArray(v)) return v;
+    if (v == null) return [];
+    const s = String(v).trim();
+    if (!s) return [];
+    // 「兌」「坎,乾」「坎・乾」「坎 乾」などを吸収
+    return s.split(/[\s,、・/]+/).filter(Boolean);
+  };
+
+  // 月データの持ち方が月ごとに揺れても拾えるように、参照先を複数用意（安全版）
+  const getByPath = (obj, path) => {
+    try{
+      return path.split(".").reduce((o,k)=> (o==null? undefined : o[k]), obj);
+    }catch(_){ return undefined; }
+  };
+  const firstDefined = (...vals) => {
+    for(const v of vals){
+      if(v!==undefined && v!==null) return v;
+    }
+    return undefined;
+  };
+
+  const tendoSrcRaw = firstDefined(
+    mBlock?.tendo,
+    mBlock?.tendou,
+    mBlock?.tenDou,
+    getByPath(mBlock,"board.tendo"),
+    getByPath(mBlock,"board.tendou"),
+    getByPath(mBlock,"board.marks.tendo"),
+    getByPath(mBlock,"board.marks.tendou"),
+    getByPath(mBlock,"marks.tendo"),
+    getByPath(mBlock,"marks.tendou"),
+    mBlock?.["天道"],
+    getByPath(mBlock,"board.天道"),
+    getByPath(mBlock,"board.marks.天道")
+  );
+
+  const goodSrcRaw = firstDefined(
+    mBlock?.goodGods,
+    mBlock?.goodGod,
+    mBlock?.kichi,
+    mBlock?.kichijin,
+    mBlock?.kishin,
+    getByPath(mBlock,"board.goodGods"),
+    getByPath(mBlock,"board.goodGod"),
+    getByPath(mBlock,"board.marks.goodGods"),
+    getByPath(mBlock,"board.marks.goodGod"),
+    getByPath(mBlock,"marks.goodGods"),
+    getByPath(mBlock,"marks.goodGod"),
+    mBlock?.["吉神"],
+    getByPath(mBlock,"board.吉神"),
+    getByPath(mBlock,"board.marks.吉神")
+  );
+
+  // 入力が「兌」「坎宮」などの“宮名”の場合もあれば、「西」「北東」など“方位”で来る場合もある。
+  // どちらでも「宮（兌など）」に正規化して扱う。
+  const DIR_JP_TO_DIRKEY = {
+    "北":"N","南":"S","東":"E","西":"W",
+    "北東":"NE","北西":"NW","南東":"SE","南西":"SW",
+    "中央":"C","中":"C"
+  };
+  const dirKeyToPalace = (dirKey) => {
+    // DIR_TO_PALACE がある環境ならそれを優先
+    if (typeof DIR_TO_PALACE === "object" && DIR_TO_PALACE && DIR_TO_PALACE[dirKey]) return DIR_TO_PALACE[dirKey];
+    // フォールバック（万一のため）
+    const fallback = { N:"坎", S:"離", E:"震", W:"兌", NE:"艮", NW:"乾", SE:"巽", SW:"坤", C:"中" };
+    return fallback[dirKey] || null;
+  };
+  const tokenToPalace = (t) => {
+    if (t == null) return null;
+    const s = String(t).trim();
+    if (!s) return null;
+    // 方位表記 → 宮へ
+    if (DIR_JP_TO_DIRKEY[s]) return normPalace(dirKeyToPalace(DIR_JP_TO_DIRKEY[s]));
+    // 宮表記 → 宮へ
+    return normPalace(s);
+  };
+
+  const tendoPalaces = toArr(tendoSrcRaw).map(tokenToPalace).filter(Boolean);
+  const goodPalaces  = toArr(goodSrcRaw).map(tokenToPalace).filter(Boolean);
+
+  const PALACE_TO_IDX_MONTH = Object.fromEntries(IDX_TO_PALACE_SOUTH_TOP.map((p,i)=>[p,i]));
+  const PALACE_TO_DIR_MONTH = { "離":"S","坎":"N","震":"E","兌":"W","巽":"SE","坤":"SW","艮":"NE","乾":"NW","中":"C" };
+
+  const starAtPalace = (pal) => {
+    const idx = PALACE_TO_IDX_MONTH[pal];
+    return (idx != null && Array.isArray(mGrid)) ? Number(mGrid[idx]) : null;
+  };
+  const dirLabelOfPalace = (pal) => {
+    const d = PALACE_TO_DIR_MONTH[pal] || "";
+    return DIR_LABEL_JP?.[d] || "";
+  };
+  const starDirText = (pal) => {
+    const s = starAtPalace(pal);
+    const dir = dirLabelOfPalace(pal);
+    if (!s) return "";
+    return `${starNameJP(s)}（${dir || "—"}）`;
+  };
+
+  // 1行目：天道＋吉神（同じ列）
+  const tendoTxt = tendoPalaces.length
+    ? `天道-${tendoPalaces.map(starDirText).filter(Boolean).join("・")}`
+    : "";
+  const goodTxt = goodPalaces.length
+    ? `吉神-${goodPalaces.map(starDirText).filter(Boolean).join("・")}`
+    : "";
+
+  // 2行目：暗剣殺・五黄殺・月破（同じ列）
+  const gohPal   = normPalace(marks.gohPalace);
+  const ankenPal = normPalace(marks.ankensatsuPalace);
+  const haPal    = normPalace(marks.haPalace);
+  const haTypeRaw = String(marks.haType || "");
+  // 月盤では「歳破」と入っていてもユーザー表示は「月破」に統一（"破"なら月破として表示）
+  const haType = haTypeRaw.includes("破") ? "月破" : "";
+
+  // 五黄殺：星名は出さず方位だけ（必ず五黄になるため）
+  const gohLine = gohPal ? `五黄殺（${dirLabelOfPalace(gohPal) || "—"}）` : "";
+
+  // 五黄が中宮の月は暗剣殺なし
+  const ankenLine = (gohPal === "中") ? "" : (ankenPal ? `暗剣殺-${starDirText(ankenPal)}` : "");
+
+  // 月破はデータの方位をそのまま採用（反対補正しない）
+  const haLine = (haType && haPal) ? `${haType}-${starDirText(haPal)}` : "";
+
+  const hasTop = (tendoTxt || goodTxt);
+  const hasBottom = (ankenLine || gohLine || haLine);
+  if (!hasTop && !hasBottom) return "";
+
+  return `
+    <div class="badge-block">
+      ${hasTop ? `<div class="badge-row badge-row-top">
+        ${tendoTxt ? `<span class="badge-item">${tendoTxt}</span>` : ``}
+        ${goodTxt ? `<span class="badge-item">${goodTxt}</span>` : ``}
+      </div>` : ``}
+
+      ${hasBottom ? `<div class="badge-row badge-row-bottom">
+        ${ankenLine ? `<span class="badge-item">${ankenLine}</span>` : ``}
+        ${gohLine ? `<span class="badge-item">${gohLine}</span>` : ``}
+        ${haLine ? `<span class="badge-item">${haLine}</span>` : ``}
+      </div>` : ``}
+    </div>
+  `;
+}
 
 
 function getMonthUneiScore(honmei, month1to12){
@@ -440,7 +789,13 @@ function findYearBlock(dateStr){
 function findMonthBlock(dateStr, monthKey){
   // ① idで直指定（range未入力でも拾える）
   if(monthKey){
-    const direct = (data.monthBlocks || []).find(m => String(m.id) === String(monthKey));
+    const mk = String(monthKey);
+    const mkNorm = mk.replace(/-(0+)(\d)$/, "-$2"); // 2026-02 -> 2026-2
+    const direct = (data.monthBlocks || []).find(m => {
+      const id = String(m.id ?? "");
+      const idNorm = id.replace(/-(0+)(\d)$/, "-$2");
+      return (id === mk) || (idNorm === mkNorm);
+    });
     if(direct) return direct;
   }
   // ② rangeがあるものだけ日付で拾う
@@ -476,6 +831,100 @@ memoEl?.addEventListener("input", () => {
   localStorage.setItem(memoKey(dateStr), memoEl.value);
 });
 
+
+// ===== ラッキーカラー・ラッキーナンバー（宮ごと） =====
+const PALACE_LUCKY = {
+  "巽": { numbers:[3,8], colors:["緑"] },
+  "離": { numbers:[2,7], colors:["赤","紫"] },
+  "坤": { numbers:[5,10], colors:["こげ茶","茶色"] },
+  "震": { numbers:[3,8], colors:["青"] },
+  "中": { numbers:[5,10], colors:["黄色","茶色"] },
+  "兌": { numbers:[4,9], colors:["ピンク","オレンジ"] },
+  "艮": { numbers:[5,10], colors:["アイボリー","茶色"] },
+  "坎": { numbers:[1,6], colors:["白","黒","グレー"] },
+  "乾": { numbers:[4,9], colors:["金","銀","パール"] },
+};
+
+// ===== 日詳細モーダル & メモ（カレンダー下固定） =====
+let dayModalEl = null;
+
+function ensureDayModal(){
+  if(dayModalEl) return dayModalEl;
+
+  // CSS（薄く・アプリの世界観を崩さない）
+  const style = document.createElement("style");
+  style.textContent = `
+  .day-modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:9999;}
+  .day-modal{width:min(820px, calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:auto; background:rgba(8,16,30,.98); border:1px solid rgba(255,255,255,.12); border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,.5); padding:18px 18px 16px;}
+  .day-modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;}
+  .day-modal-title{font-size:20px; font-weight:700; letter-spacing:.5px;}
+  .day-modal-close{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); color:inherit; border-radius:12px; padding:8px 12px; cursor:pointer;}
+  .day-modal-grid{display:grid; grid-template-columns:1fr; gap:10px;}
+  .day-modal-row{border:1px solid rgba(255,255,255,.10); border-radius:14px; padding:12px 12px 10px; background:rgba(255,255,255,.03);}
+  .day-modal-row .label{opacity:.85; font-size:13px; margin-bottom:6px;}
+  .day-modal-row .value{font-size:16px; line-height:1.5; font-weight:600;}
+  .day-modal-sub{margin-top:8px; font-size:14px; line-height:1.55; opacity:.92; font-weight:500;}
+  @media (min-width:720px){ .day-modal-grid{grid-template-columns:1fr 1fr;} .span2{grid-column:1 / -1;} }
+  `;
+  document.head.appendChild(style);
+
+  const overlay = document.createElement("div");
+  overlay.className = "day-modal-overlay";
+  overlay.innerHTML = `
+    <div class="day-modal" role="dialog" aria-modal="true">
+      <header>
+        <div class="day-modal-title" id="dayModalTitle">日詳細</div>
+        <button class="day-modal-close" id="dayModalClose">閉じる</button>
+      </header>
+      <div class="day-modal-grid" id="dayModalBody"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const closeBtn = overlay.querySelector("#dayModalClose");
+  closeBtn.addEventListener("click", () => overlay.style.display="none");
+  overlay.addEventListener("click", (e) => { if(e.target === overlay) overlay.style.display="none"; });
+  window.addEventListener("keydown", (e) => { if(e.key === "Escape") overlay.style.display="none"; });
+
+  dayModalEl = overlay;
+  return dayModalEl;
+}
+
+function setupMemoBelowCalendar(){
+  if(!memoEl || !calendarEl) return;
+  if(memoEl.dataset.moved === "1") return;
+
+  // 既存のtextareaを、カレンダー下に「メモ枠」を作って移動
+  const wrap = document.createElement("div");
+  wrap.className = "card";
+  wrap.style.marginTop = "14px";
+  wrap.innerHTML = `
+    <div style="font-size:22px; font-weight:800; margin-bottom:10px;">メモ（自動保存）</div>
+  `;
+  // memoEl を移動
+  memoEl.style.width = "100%";
+  memoEl.style.minHeight = "180px";
+  memoEl.style.borderRadius = "14px";
+  memoEl.style.border = "1px solid rgba(255,255,255,.12)";
+  memoEl.style.background = "rgba(255,255,255,.03)";
+  memoEl.style.padding = "12px 14px";
+  wrap.appendChild(memoEl);
+
+  // カレンダーの直下（calendarEl の末尾）に追加
+  calendarEl.appendChild(wrap);
+  memoEl.dataset.moved = "1";
+}
+
+// 宮からラッキー情報を作る（宮名は表示しない）
+function luckyInfoByPalace(palace){
+  const key = (palace === "中宮") ? "中" : palace;
+  const info = PALACE_LUCKY[key];
+  if(!info) return { numbersText:"", colorsText:"" };
+  return {
+    numbersText: info.numbers.join("・"),
+    colorsText: info.colors.join("・"),
+  };
+}
 // ===== データ読み込み =====
 async function loadHonmei(honmei){
   const h = Number(honmei);
@@ -549,10 +998,19 @@ function renderTopBoards(yyyy, mm){
 
   // 表示用（本命星×月）点数＆運名：データが無い月はここで自動補完
   const honmei = Number(honmeiSelect?.value || 1);
+  const yearLuckyDirs = getYearLuckyDirs(yyyy, honmei, monthAfterDate);
+  const yearLuckyText = yearLuckyDirs.length ? yearLuckyDirs.join("・") : "—";
   const yearLuckLabel  = (yBlock?.fortuneName ?? "") || getLuckLabelFromGrid(yGrid, honmei);
   const yearScoreVal   = (yBlock?.score ?? "");
   const monthLuckLabel = (mBlock?.fortuneName ?? "") || (mGrid ? getLuckLabelFromGrid(mGrid, honmei) : "") || "";
   const monthScoreVal  = (mBlock?.score ?? "") || (getMonthUneiScore(honmei, mm) ?? "");
+
+  // 月メッセージ（本命星が入る宮の文章を使う）
+  const honmeiPalM = palaceOfStarMonth(mGrid, honmei);
+  const mMsg = getMonthPalaceMessage(honmeiPalM) || {};
+
+  // 月の吉方位表示（日盤と同ルール）
+  let kichiText = "—";
 
   // 月盤ヘッダ用バッジ（ア=暗剣殺 / 破=月破 / 天=天道 / 吉=吉神）
   // 暗剣殺は月盤の marks から（無ければ表示用 mGrid から自動算出）
@@ -560,77 +1018,33 @@ function renderTopBoards(yyyy, mm){
     ? calcGohAnkenFromGrid(mGrid)
     : (monthMarks || {});
   
-  // ■ 月盤カード右上：バッジ（暗剣殺／五黄殺／月破(haType)／天道／吉神）
+  
+  // 月の吉方位を計算（除外：本命星の向かい／暗剣殺／五黄殺／月破／中宮）
+  const monthBoardObj = mGrid ? gridToBoardObj(mGrid) : null;
+  const monthGoodDirs = getGoodDirsFromGetsuban(monthBoardObj, honmei, monthMarksCalc || {});
+  kichiText = monthGoodDirs.length ? monthGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
+
+// ■ 月盤カード右上：バッジ（暗剣殺／五黄殺／月破(haType)／天道／吉神）
   // ※ まずは MONTH_BADGE_DATA_2026 に入力したものだけを表示（未入力月は何も表示しない）
 
-// 月盤カード右上：暗剣殺/五黄殺/月破/天道/吉神（本命星の宮にかかるものだけ表示）
-const badges = [];
-// 本命星が今月どの宮にいるか
-  const mBoardObjMsg = gridToBoardObj(mGrid);
-  const honmeiDir = findDirOfStar(mBoardObjMsg, currentHonmei);
-  const honmeiPal = honmeiDir ? DIR_TO_PALACE[honmeiDir] : null;
 
-// ===== 宮メッセージ & 吉方位（表示）=====
-const mMsg = getMonthPalaceMessage(honmeiPal);
+// 月盤：天道・吉神・暗剣殺・五黄殺・月破などの表示ブロック
+const monthBadgeBlock = monthBadgeBlockHtml(mBlock, mGrid);
 
-// データ側（honmei-*.json）の kichiDirs を表示（未入力なら "—"）
-const kichiDirs = Array.isArray(mBlock?.kichiDirs) ? mBlock.kichiDirs : [];
-const kichiText = kichiDirs.map(d => DIR_LABEL_JP[d] || d).join("・");
+const yExpanded = !!YEAR_MORE_OPEN[String(yBlock?.id ?? "")];
 
 
-
-// データ：monthBlocks優先。無ければ MONTH_BADGE_DATA_2026 を参照（入力していれば使える）
-const meta2 = (MONTH_BADGE_DATA_2026 && MONTH_BADGE_DATA_2026[monthKey]) ? MONTH_BADGE_DATA_2026[monthKey] : {};
-
-// データ側の表記ゆれ対策（全角/半角スペース・「○○宮」表記）
-// marks が無い月でも、grid から五黄殺/暗剣殺を自動算出してバッジ判定に使う
-const mMarksRaw = (mBlock?.board?.marks ?? meta2?.marks ?? {});
-const mMarksAuto = (mGrid ? calcGohAnkenFromGrid(mGrid) : {});
-const mMarks = {
-  ankensatsuPalace: normPalace(mMarksRaw.ankensatsuPalace || mMarksAuto.ankensatsuPalace),
-  gohosatsuPalace:  normPalace(mMarksRaw.gohosatsuPalace  || mMarksAuto.gohosatsuPalace),
-  haType: (mMarksRaw.haType==null? null : String(mMarksRaw.haType).trim()),
-  haPalace: normPalace(mMarksRaw.haPalace),
-};
-
-const tendoArr = Array.isArray(mBlock?.tendo) ? mBlock.tendo
-               : (Array.isArray(meta2?.tendo) ? meta2.tendo : []);
-const goodArr  = Array.isArray(mBlock?.goodGods) ? mBlock.goodGods
-               : (Array.isArray(meta2?.goodGods) ? meta2.goodGods : []);
-
-const tendoP = tendoArr.map(normPalace).filter(Boolean);
-const goodP  = goodArr.map(normPalace).filter(Boolean);
-
-  // 五黄殺＝盤の中の「5」が入る宮、暗剣殺＝その向かいの宮（marks の値は使わない）
-  const mBoardObj = gridToBoardObj(mGrid);
-  const gohoDir = findDirOfStar(mBoardObj, 5);
-  const ankenDir = oppositeDir(gohoDir);
-  const gohoPal  = gohoDir  ? DIR_TO_PALACE[gohoDir]  : null;
-  const ankenPal = ankenDir ? DIR_TO_PALACE[ankenDir] : null;
-const haPal    = normPalace(mMarks?.haPalace);
-
-if (honmeiPal && mMarks.ankensatsuPalace && mMarks.ankensatsuPalace === honmeiPal) badges.push("暗剣殺");
-if (honmeiPal && mMarks.gohosatsuPalace && mMarks.gohosatsuPalace === honmeiPal)  badges.push("五黄殺");
-if (honmeiPal && mMarks.haType === "月破" && mMarks.haPalace && mMarks.haPalace === honmeiPal) badges.push("月破");
-
-if (honmeiPal && tendoP.includes(honmeiPal)) badges.push("天道");
-if (honmeiPal && goodP.includes(honmeiPal))  badges.push("吉神");
-
-const badgeText = badges.join("・");
-const monthBadgesHtml = badgeText ? `${badgeText} ` : "";
-
-console.log("[MONTH_BADGE]", currentMonth, { honmeiPal, tendoP, goodP, marks: mMarks });
-
-
-  const yearHtml = `
+const yearHtml = `
     <div class="boardCard">
       <div class="boardCardHead">
         <div class="boardTitle">${yearTitle}</div>
-        <div class="boardMeta">${yearLuckLabel} / ${yearScoreVal}</div>
+        <div class="boardMeta"><span class="fortuneName" style="font-weight:700; font-size:1.1em;">${yearLuckLabel}</span> <span class="fortuneScore" style="font-weight:700; font-size:1.1em;">${yearScoreVal}点</span></div>
       </div>
       <div class="boardBody">
         ${yGrid ? boardSvg(gridToBoardObj(yGrid), yearGohDir, yearAnkenDir, false, YEAR_BAD_PURPLE) : `<div class="boardText">※年盤データがありません</div>`}
-        <div class="boardText">${formatYearMessageSimple(yBlock?.message ?? "")}</div>
+        <div class="boardText">${formatYearMessageSimple(yBlock?.message ?? "", yExpanded, yBlock?.id ?? "")}
+          <div class="yearKeyword">（吉方位：${escapeHtml(yearLuckyText)}）</div>
+        </div>
       </div>
     </div>
   `;
@@ -639,11 +1053,14 @@ console.log("[MONTH_BADGE]", currentMonth, { honmeiPal, tendoP, goodP, marks: mM
     <div class="boardCard">
       <div class="boardCardHead">
         <div class="boardTitle">${monthTitle}</div>
-        <div class="boardMeta">${monthBadgesHtml}${monthLuckLabel} / ${monthScoreVal}</div>
+        <div class="boardMeta"><span class="fortuneName" style="font-weight:700; font-size:1.1em;">${monthLuckLabel}</span> <span class="fortuneScore" style="font-weight:700; font-size:1.1em;">${monthScoreVal}点</span></div>
       </div>
       <div class="boardBody">
-        ${mGrid ? boardSvg(gridToBoardObj(mGrid), monthGohDir, monthAnkenDir, false, MONTH_BAD_GREEN) : `<div class="boardText">※月盤データが見つかりません</div>`}
+        ${mGrid ? boardSvg(gridToBoardObj(mGrid), monthGohDir, monthAnkenDir, false, MONTH_BAD_GREEN) : `<div class="boardText">
+  ${monthBadgeBlock}
+※月盤データが見つかりません</div>`}
 <div class="boardText">
+    ${monthBadgeBlock}
   <div><b>テーマ：</b>${mMsg?.theme ?? (mBlock?.message?.theme ?? "")}</div>
   <div><b>今月の伸ばし方：</b>${(Array.isArray(mMsg?.good) ? mMsg.good.join("／") : (mBlock?.message?.good?.[0] ?? ""))}</div>
   <div><b>注意：</b>${mMsg?.caution ?? (mBlock?.message?.caution?.[0] ?? "")}</div>
@@ -665,6 +1082,7 @@ function renderMonth(){
   const [yyyyStr, mmStr] = currentMonth.split("-");
   const yyyy = Number(yyyyStr);
   const mm   = Number(mmStr);
+  const setsuDay = SETSUIRI_DAY_BY_MONTH[mm] || null;
 
   titleEl.textContent = `${yyyy}年${mm}月`;
   if(subtitleEl) subtitleEl.textContent = "";
@@ -731,13 +1149,15 @@ function renderMonth(){
     const hasAn = dayWarnings.includes("暗剣殺");
     const hasHa = dayWarnings.includes("日破");
     const mark = hasAn ? "ア" : (hasHa ? "破" : "");
+    const isSetsuiri = (setsuDay != null && d === setsuDay);
 
     const cell = document.createElement("div");
-    cell.className = `dayCell state-${state}`;
+    cell.className = `dayCell state-${state}${isSetsuiri ? " setsuiri" : ""}`;
     cell.innerHTML = `
       <div class="topRow">
         <div class="topLeft">
           <div class="dayNum">${d}</div>
+          ${isSetsuiri ? `` : ``}
           ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
           <div class="stateBadge">${state}</div>
         </div>
@@ -761,35 +1181,86 @@ function pickOneLine(dateStr){
 }
 
 function openDetail(dateStr){
-  calendarEl.classList.add("hidden");
-  detailEl.classList.remove("hidden");
+  // カレンダーはそのまま。情報だけモーダルで表示し、メモは下固定。
+  setupMemoBelowCalendar();
 
   const dayObj = (data?.days && data.days[dateStr]) ? data.days[dateStr] : {};
   const dObj = parseISO(dateStr);
   const board = makeNichiban2026(dObj);
+
+  // 今日が入る宮（内部で使う。宮名は表示しない）
   const palace = dayObj.palace ?? inferPalaceFromNichiban(board, Number(currentHonmei)) ?? "中";
+
+  // 日の凶作用（暗剣殺・五黄殺など）＋日破
   const inferred = inferDayWarningsFromNichiban(board, Number(currentHonmei));
   const nichihaPalace = getNichihaPalaceByDate(dObj);
   const hasNichiha = (palace && nichihaPalace && palace === nichihaPalace);
   const dayWarnings = Array.from(new Set([...(dayObj.dayWarnings ?? []), ...inferred, ...(hasNichiha ? ["日破"] : [])]));
 
+  // 点数（既存ロジック）
   const dayScore = calcDayScore(palace, dayWarnings);
-  const yb = findYearBlock(dateStr);
-  const mb = findMonthBlock(dateStr);
 
-  detailDateEl.textContent = dateStr;
-  refYearEl.textContent = yb ? `${yb.fortuneName ?? ""}（${yb.score ?? ""}点）` : "—";
-  refMonthEl.textContent = mb ? `${mb.fortuneName ?? ""}（${mb.score ?? ""}点）` : "—";
+  // 吉方位（日）＝既存ロジック
+  const haDir = getNichihaDirByDate(dObj);
+  const goodDirs = getGoodDirsFromNichiban(board, Number(currentHonmei), haDir);
+  const goodDirText = goodDirs.length ? goodDirs.map(d => DIR_LABEL_JP[d] || d).join("・") : "なし";
 
-  dayPalaceEl.textContent = palace;
-  dayScoreEl.textContent = String(dayScore);
+  // ラッキー（宮→色/数：宮名は表示しない）
+  const lucky = luckyInfoByPalace(palace);
+  const luckyNumText = lucky.numbersText || "—";
+  const luckyColorText = lucky.colorsText || "—";
 
-  dayBadEl.textContent = (dayWarnings.length ? dayWarnings.join("・") : "なし");
-  monthBadEl.textContent = "—";
-  oneLineEl.textContent = pickOneLine(dateStr);
+  // ひとこと（既存）
+  const oneLine = `${pickOneLine(dateStr)}`.trim() || "—";
 
-  memoEl.dataset.date = dateStr;
-  memoEl.value = localStorage.getItem(memoKey(dateStr)) ?? "";
+  // 開運アクション（宮ごとの月メッセージから流用：日盤でも違和感なく使える）
+  const pKey = (palace === "中宮") ? "中" : palace;
+  const act = (MONTH_PALACE_MESSAGES?.[pKey]?.action) ? MONTH_PALACE_MESSAGES[pKey].action : "—";
+
+  // メモ（下固定）
+  if (memoEl){
+    memoEl.dataset.date = dateStr;
+    memoEl.value = localStorage.getItem(memoKey(dateStr)) ?? "";
+  }
+
+  // モーダル表示
+  const modal = ensureDayModal();
+  const titleEl = modal.querySelector("#dayModalTitle");
+  const bodyEl  = modal.querySelector("#dayModalBody");
+  if (titleEl) titleEl.textContent = dateStr;
+
+  const warnText = dayWarnings.length ? dayWarnings.join("・") : "なし";
+
+  bodyEl.innerHTML = `
+    <div class="day-modal-row">
+      <div class="label">今日の運勢</div>
+      <div class="value">${dayScore}点</div>
+    </div>
+    <div class="day-modal-row">
+      <div class="label">今日の吉方位</div>
+      <div class="value">${goodDirText}</div>
+    </div>
+
+    <div class="day-modal-row">
+      <div class="label">注意（凶作用）</div>
+      <div class="value">${warnText}</div>
+    </div>
+    <div class="day-modal-row">
+      <div class="label">ラッキーナンバー / ラッキーカラー</div>
+      <div class="value">${luckyNumText} ／ ${luckyColorText}</div>
+    </div>
+
+    <div class="day-modal-row span2">
+      <div class="label">ひとことメッセージ</div>
+      <div class="value">${escapeHtml(oneLine)}</div>
+    </div>
+    <div class="day-modal-row span2">
+      <div class="label">開運アクション</div>
+      <div class="value">${escapeHtml(act)}</div>
+    </div>
+  `;
+
+  modal.style.display = "flex";
 }
 
 // ===== 起動 =====
@@ -798,6 +1269,7 @@ async function boot(){
   currentMonth = monthInput.value;
   await loadHonmei(currentHonmei);
   renderMonth();
+  setupMemoBelowCalendar();
 }
 honmeiSelect?.addEventListener("change", () => boot().catch(showBootError));
 monthInput?.addEventListener("change", () => {
@@ -965,3 +1437,21 @@ function makeNichiban2026(date){
     SW:b.SW, S:b.S, SE:b.SE
   };
 }
+
+/* ===== Badge block layout tweaks ===== */
+// NOTE: CSS をJS内に直接書くと構文エラーで全体が止まるため、styleタグとして注入する
+(function injectBadgeCss(){
+  try{
+    const css = `
+      .badge-row-top{display:flex; gap:14px; flex-wrap:wrap; align-items:center;}
+      .badge-item{white-space:nowrap;}
+      .badge-row-bottom{margin-top:6px;}
+      .dayCell.setsuiri{outline:2px solid rgba(255,182,193,0.8); border-radius:6px;}
+      `;
+    const st = document.createElement('style');
+    st.textContent = css;
+    document.head.appendChild(st);
+  } catch(e){
+    // ignore
+  }
+})();
