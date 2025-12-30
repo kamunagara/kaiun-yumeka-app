@@ -77,19 +77,22 @@ const FIXED_HONMEI = (() => {
   }
 })();
 
-// 固定されている場合はセレクトを隠し、変更不可にする
+// 固定されている場合は本命星を固定表示（販売用）
+// - セレクトは非表示＆変更不可
+// - 「本命星」ラベルに星名を表示（例：本命星：二黒土星）
 if (FIXED_HONMEI && honmeiSelect) {
   honmeiSelect.value = String(FIXED_HONMEI);
   honmeiSelect.disabled = true;
   honmeiSelect.style.display = "none";
+
   const label = document.querySelector('label[for="honmeiSelect"]');
-  if (label) label.style.display = "none";
-  // もし親が本命星だけのラッパーなら親も隠す（年月セレクトまで消さないように慎重に）
-  try {
-    const wrap = honmeiSelect.closest('.control') || honmeiSelect.closest('.field') || honmeiSelect.parentElement;
-    if (wrap && wrap.querySelectorAll('select, input').length === 1) wrap.style.display = 'none';
-  } catch(e) {}
+  if (label) {
+    const name = STAR_NAMES?.[FIXED_HONMEI] || `星${FIXED_HONMEI}`;
+    label.style.display = "";
+    label.textContent = `本命星：${name}`;
+  }
 }
+
 
 const detailDateEl = $("detailDate");
 const refYearEl = $("refYear");
