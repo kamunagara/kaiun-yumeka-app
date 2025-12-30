@@ -109,6 +109,7 @@ const dialogText = $("dialogText");
 const closeDialog = $("closeDialog");
 
 let data = null;
+let dataLoadError = "";
 let currentMonth = "2026-01";
 let currentHonmei = 1;
 
@@ -1164,20 +1165,37 @@ async function loadHonmei(honmei){
   const h = Number(honmei);
   const url = `./data/honmei_${h}.json`;
 
-  let res;
+  // 既定の空データ（読み込み失敗でも画面が崩れないように）
+  const EMPTY = { yearBlocks: [], monthBlocks: [], yuki: [] };
+
+  let res = null;
   try{
     res = await fetch(url, { cache: "no-store" });
   }catch(e){
-    throw new Error(`データ取得に失敗しました（通信/パス）: ${url}
-${e?.message ?? e}`);
+    data = EMPTY;
+    dataLoadError = `データ取得に失敗しました: ${url}`;
+    console.warn(dataLoadError, e);
+    return;
   }
 
   if(!res.ok){
-    throw new Error(`データが読めません: ${url}（HTTP ${res.status}）`);
+    data = EMPTY;
+    dataLoadError = `データが見つかりません: ${url}（HTTP ${res.status}）`;
+    console.warn(dataLoadError);
+    return;
   }
 
-  data = await res.json();
+  try{
+    const json = await res.json();
+    data = json || EMPTY;
+    dataLoadError = "";
+  }catch(e){
+    data = EMPTY;
+    dataLoadError = `データの解析に失敗しました: ${url}`;
+    console.warn(dataLoadError, e);
+  }
 }
+
 
 // ===== 点数・状態 =====
 function calcDayScore(palace, dayWarnings = []) {
