@@ -784,6 +784,12 @@ function gridToBoardObj(grid){
   };
 }
 
+
+// grid が無い（null/undefined）場合でも落ちないためのラッパー
+function safeGridToBoardObj(grid){
+  return Array.isArray(grid) ? gridToBoardObj(grid) : null;
+}
+
 /**
  * boardSvg（=日盤と同じ見た目配置）に合わせて、
  * “通常の方位盤(NW,N,NE,W,C,E,SW,S,SE)” を
@@ -1238,14 +1244,14 @@ function renderTopBoards(yyyy, mm){
   const monthLabel = monthLabelRaw.replace(/（節入り）/g, "");
   const monthTitle = `月盤（${monthLabel}）`;
 // 年盤の紫（五黄殺・暗剣殺）は「方位キー」にして boardSvg へ渡す
-    // 五黄殺/暗剣殺（年盤・月盤）は grid の中の「5」とその向かいで決める（marks は使わない）
-  const yBoardObj = gridToBoardObj(yGrid);
-  const yearGohDir = findDirOfStar(yBoardObj, 5);
-  const yearAnkenDir = oppositeDir(yearGohDir);
+// 五黄殺/暗剣殺（年盤・月盤）は grid の中の「5」とその向かいで決める（marks は使わない）
+const yBoardObj = safeGridToBoardObj(yGrid);
+const yearGohDir = yBoardObj ? findDirOfStar(yBoardObj, 5) : null;
+const yearAnkenDir = yearGohDir ? oppositeDir(yearGohDir) : null;
 
-  const mBoardObjForBad = gridToBoardObj(mGrid);
-  const monthGohDir = findDirOfStar(mBoardObjForBad, 5);
-  const monthAnkenDir = oppositeDir(monthGohDir);
+const mBoardObjForBad = safeGridToBoardObj(mGrid);
+const monthGohDir = mBoardObjForBad ? findDirOfStar(mBoardObjForBad, 5) : null;
+const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
 
 
   // 表示用（本命星×月）点数＆運名：データが無い月はここで自動補完
