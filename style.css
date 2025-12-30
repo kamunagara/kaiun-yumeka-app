@@ -471,3 +471,17 @@ dialog{
   font-size: 13px;
   line-height: 1.55;
 }
+/* ===== 上部セレクター（本命星・年月）を大きくする ===== */
+
+/* 本命星セレクト */
+select {
+  font-size: 16px;   /* ← 今より少し大きく */
+  padding: 6px 10px;
+}
+
+/* 年月セレクト（month or text） */
+input[type="month"],
+input[type="text"] {
+  font-size: 16px;
+  padding: 6px 10px;
+}
