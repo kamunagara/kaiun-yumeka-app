@@ -347,6 +347,58 @@ const YEAR_LUCKY_DIRECTIONS = {
     }
   }
 };
+
+// ===============================
+// 祐気どり（データ登録）
+//  - 年に数回のため「計算しない」方針
+//  - date: YYYY-MM-DD
+//  - times: ["HH:MM-HH:MM", ...]（複数枠OK）
+//  - dirs: ["南西","西","東北東", ...]（複数方位OK）
+// ===============================
+const YUKIDORI_EVENTS = {
+  "2026": {
+    1: [ // 一白水星
+      { date:"2026-04-13", times:["15:00-17:00"], dirs:["南西"] },
+
+      // 5/9, 5/18, 5/27, 6/5：西（1-3 / 19-21）
+      { date:"2026-05-09", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
+      { date:"2026-05-18", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
+      { date:"2026-05-27", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
+      { date:"2026-06-05", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
+
+      // 6/13：西（5-7）
+      { date:"2026-06-13", times:["05:00-07:00"], dirs:["西"] },
+      // 6/24, 7/3：西（15-17）
+      { date:"2026-06-24", times:["15:00-17:00"], dirs:["西"] },
+      { date:"2026-07-03", times:["15:00-17:00"], dirs:["西"] },
+
+      // 7/13：東北東（11-13）
+      { date:"2026-07-13", times:["11:00-13:00"], dirs:["東北東"] },
+
+      // 8/10, 8/19, 8/28, 9/6：西（7-9）
+      { date:"2026-08-10", times:["07:00-09:00"], dirs:["西"] },
+      { date:"2026-08-19", times:["07:00-09:00"], dirs:["西"] },
+      { date:"2026-08-28", times:["07:00-09:00"], dirs:["西"] },
+      { date:"2026-09-06", times:["07:00-09:00"], dirs:["西"] },
+
+      // 9/7, 9/16, 9/25, 10/4：東北・南西・西（3-5 / 21-23）
+      { date:"2026-09-07", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
+      { date:"2026-09-16", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
+      { date:"2026-09-25", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
+      { date:"2026-10-04", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
+
+      // 10/14：南西・東北（23-1 / 17-19）
+      { date:"2026-10-14", times:["23:00-01:00","17:00-19:00"], dirs:["南西","東北"] },
+    ]
+  }
+};
+
+function getYukidoriForDate(dateStr, honmeiNum){
+  const year = String(dateStr).slice(0,4);
+  const list = YUKIDORI_EVENTS?.[year]?.[Number(honmeiNum)] || [];
+  return list.filter(e => e.date === dateStr);
+}
+
 function getYearLuckyDirs(yearNum, honmeiNum, dateStr){
   const y = YEAR_LUCKY_DIRECTIONS?.[String(yearNum)]?.[Number(honmeiNum)];
   if (!y) return [];
@@ -820,7 +872,7 @@ function openDialog(title, text){
   dialog.showModal();
 }
 closeDialog?.addEventListener("click", () => dialog.close());
-helpBtn?.addEventListener("click", () => openDialog("ヘルプ", "準備中"));
+
 backBtn?.addEventListener("click", () => {
   detailEl.classList.add("hidden");
   calendarEl.classList.remove("hidden");
@@ -843,7 +895,113 @@ const PALACE_LUCKY = {
   "艮": { numbers:[5,10], colors:["アイボリー","茶色"] },
   "坎": { numbers:[1,6], colors:["白","黒","グレー"] },
   "乾": { numbers:[4,9], colors:["金","銀","パール"] },
+
 };
+// ===============================
+// 日詳細：吉数・吉色・吉香（宮→表示）
+// ※宮名自体は表示しない
+// ===============================
+
+function stablePick(list, seedStr){
+  if(!Array.isArray(list) || list.length === 0) return "";
+  // 文字列ハッシュ（簡易・安定）
+  let h = 2166136261;
+  for (let i=0; i<seedStr.length; i++){
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const idx = Math.abs(h) % list.length;
+  return list[idx];
+}
+
+// 宮→吉香（各3。表示はランダム1つ）
+// 宮→吉香（各3。表示はランダム1つ）
+const PALACE_KIKOU = {
+  "巽": ["ベルガモット", "ライム", "バジル"],
+  "離": ["イランイラン", "オレンジ", "シナモン"],
+  "坤": ["ラベンダー", "ローマンカモミール", "ベチバー"],
+  "震": ["ペパーミント", "レモン", "ローズマリー"],
+  "中": ["レモングラス", "ティーツリー", "ベチバー"],
+  "兌": ["ゼラニウム", "オレンジ", "パチョリ"],
+  "艮": ["サンダルウッド", "ヒノキ", "ベチバー"],
+  "坎": ["サイプレス", "ユーカリ", "ジュニパーベリー"],
+  "乾": ["フランキンセンス", "サンダルウッド", "グレープフルーツ"],
+};
+
+// 宮→ひとこと（各3。表示はランダム1つ）
+const PALACE_ONE_LINE = {
+  "巽": ["風に乗る。広げるより“整える”が先。", "紹介・ご縁・循環が動く月。丁寧に返す。", "足りないものが補われ、交際や取引が整う日。"],
+  "離": ["魅せ方を磨く。主役は“あなたの一言”。", "情熱は武器。熱くなりすぎず芯を保つ。", "決断は早めに。迷うなら一度寝かせる。"],
+  "坤": ["土台づくりの日。コツコツが一番強い。", "受け取る器を整える。感謝が運を呼ぶ。", "地道な積み重ねが、あとで大きな力になります。"],
+  "震": ["スタートの合図。まず一歩、動く。", "勢いは吉。やりながら整える。", "思い立ったら即連絡。流れが開く。"],
+  "中": ["中心に戻る日。優先順位を1つに。", "リセットすると運が回る。整理が吉。", "背筋を伸ばすと判断が冴える。"],
+  "兌": ["楽しさが鍵。笑顔がご縁を連れてくる。", "言葉を明るく。軽さが流れを作る。", "楽しみの中に、成果や収穫がある一日。"],
+  "艮": ["切り替えの時。終わらせて次へ。", "小さな習慣が未来を変える。", "古い形を整え直すことで、次の変化につながる日。"],
+  "坎": ["深呼吸。焦らず足元から。", "感情の波は整えられる。静けさを選ぶ。", "守りの強さが勝ち。無理に攻めない。"],
+  "乾": ["格が上がる日。言葉と所作を整える。", "自分の看板を磨く。プロフィール更新が吉。", "プライドは味方にも敵にも。柔らかく。"],
+};
+
+// 宮→開運アクション（各3。表示はランダム1つ）
+const PALACE_ACTION = {
+  "巽": ["連絡を1本（感謝・お礼・近況）", "名刺・プロフィールを整える", "紹介したい人を1人思い浮かべる"],
+  "離": ["見せ方を1つ改善（写真・文章・肩書き）", "気になる発信を1つ保存して研究", "鏡を見て笑顔の練習30秒"],
+  "坤": ["机の上を10分だけ片付ける", "目の前の作業を一つ、丁寧に仕上げる", "家計・予定を1つ見直す"],
+  "震": ["やることを3分で着手する", "気になる所へ即返信する", "短い散歩で気を切り替える"],
+  "中": ["優先順位を1つに絞る", "背筋を伸ばす習慣を1つ作る", "不要なタブ/アプリを閉じる"],
+  "兌": ["“会う/話す”を1件入れる", "楽しい予定を先にカレンダーへ", "笑える動画/音楽で気分を上げる"],
+  "艮": ["継続したい習慣を1つ決める", "学びの型を真似る（講座/本/人）", "やめたいことを1つ手放す"],
+  "坎": ["湯船・足湯で整える", "情報を遮断する時間を作る", "静かな場所で深呼吸3回"],
+  "乾": ["服・姿勢・言葉を1つ整える", "尊敬できる人の型を真似る", "名刺/肩書き/導線を更新する"],
+};
+
+// 凶作用（暗剣殺・日破）がある時だけ表示する追加メッセージ
+function cautionMessage(palace, dayWarnings, seedStr){
+  const w = new Set(dayWarnings || []);
+  const hasHa = w.has("日破");
+  const hasAn = w.has("暗剣殺");
+  // ※暗剣殺 or 日破 が“ついた日だけ”表示
+  if(!hasHa && !hasAn) return "";
+
+  const key = (palace === "中宮") ? "中" : palace;
+  const strongKeys = ["巽","乾","兌","震","離"]; // 運勢が強い宮
+  const isStrong = strongKeys.includes(key);
+
+  const msgs = [];
+
+  // 日破
+  if(hasHa){
+    const strongHa = [
+      "卒業と更新の合図。手放すほど運が進む日。",
+      "区切りの日。終わらせることで次が開く。",
+      "更新のチャンス。古い約束を見直して。",
+    ];
+    const weakHa   = [
+      "調整と守りが吉。予定変更は流れに任せて。",
+      "無理は禁物。確認・修正・やり直しが吉。",
+      "急がず整える日。キャンセルも悪ではありません。",
+    ];
+    const msg = stablePick(isStrong ? strongHa : weakHa, `${seedStr}|${key}|ha`) || "";
+    if(msg) msgs.push(`日破：${msg}`);
+  }
+
+  // 暗剣殺
+  if(hasAn){
+    const strongAn = [
+      "卒業と手放しに追い風。切るほど軽くなる。",
+      "方向転換が吉。思い切った更新を。",
+      "流れが変わる日。執着を外すと道が開く。",
+    ];
+    const weakAn   = [
+      "慎重に。急なトラブルや延期に備えて。",
+      "今日は守り。決断は先送りが吉。",
+      "焦りは禁物。余白と確認が身を守ります。",
+    ];
+    const msg = stablePick(isStrong ? strongAn : weakAn, `${seedStr}|${key}|an`) || "";
+    if(msg) msgs.push(`暗剣殺：${msg}`);
+  }
+
+  return msgs.join(" / ");
+}
 
 // ===== 日詳細モーダル & メモ（カレンダー下固定） =====
 let dayModalEl = null;
@@ -1164,16 +1322,19 @@ function renderMonth(){
     const hasAn = dayWarnings.includes("暗剣殺");
     const hasHa = dayWarnings.includes("日破");
     const mark = hasAn ? "ア" : (hasHa ? "破" : "");
+    const yukiEvents = getYukidoriForDate(dateStr, Number(currentHonmei));
+    const hasYuki = yukiEvents.length > 0;
     const isSetsuiri = (setsuDay != null && d === setsuDay);
 
     const cell = document.createElement("div");
-    cell.className = `dayCell state-${state}${isSetsuiri ? " setsuiri" : ""}`;
+    cell.className = `dayCell state-${state}${isSetsuiri ? " setsuiri" : ""}${hasYuki ? " yuki" : ""}`;
     cell.innerHTML = `
       <div class="topRow">
         <div class="topLeft">
           <div class="dayNum">${d}</div>
           ${isSetsuiri ? `` : ``}
           ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
+          ${hasYuki ? `<span class="yukiMini" style="display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(255,192,203,0.9);color:#b85c7a;background:rgba(255,240,245,0.9);margin-left:4px;">祐</span>` : ``}
           <div class="stateBadge">${state}</div>
         </div>
         <div class="scoreNum">${dayScore}</div>
@@ -1219,18 +1380,32 @@ function openDetail(dateStr){
   const haDir = getNichihaDirByDate(dObj);
   const goodDirs = getGoodDirsFromNichiban(board, Number(currentHonmei), haDir);
   const goodDirText = goodDirs.length ? goodDirs.map(d => DIR_LABEL_JP[d] || d).join("・") : "なし";
+const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
+  const yukiText = yukiList.length
+    ? yukiList.map(e => {
+        const t = (e.times && e.times.length) ? e.times.join(" / ") : "";
+        const d = (e.dirs && e.dirs.length) ? e.dirs.join("・") : "";
+        const parts = [];
+        if(t) parts.push(t);
+        if(d) parts.push(d);
+        return parts.join("　");
+      }).join("<br>")
+    : "";
+
 
   // ラッキー（宮→色/数：宮名は表示しない）
   const lucky = luckyInfoByPalace(palace);
   const luckyNumText = lucky.numbersText || "—";
   const luckyColorText = lucky.colorsText || "—";
 
-  // ひとこと（既存）
-  const oneLine = `${pickOneLine(dateStr)}`.trim() || "—";
+  // 吉香（宮→アロマを1つランダム表示：日付で固定）
+  const pKey2 = (palace === "中宮") ? "中" : palace;
+  const kikkouOil = stablePick(PALACE_KIKOU[pKey2] || [], `${dateStr}|${pKey2}|oil`) || "—";
 
-  // 開運アクション（宮ごとの月メッセージから流用：日盤でも違和感なく使える）
+  // ひとこと・開運アクション（宮ごとの候補からランダム表示：日付で固定）
   const pKey = (palace === "中宮") ? "中" : palace;
-  const act = (MONTH_PALACE_MESSAGES?.[pKey]?.action) ? MONTH_PALACE_MESSAGES[pKey].action : "—";
+  const oneLine = stablePick(PALACE_ONE_LINE[pKey] || [], `${dateStr}|${pKey}|one`) || "—";
+  const act = stablePick(PALACE_ACTION[pKey] || [], `${dateStr}|${pKey}|act`) || "—";
 
   // メモ（下固定）
   if (memoEl){
@@ -1245,6 +1420,7 @@ function openDetail(dateStr){
   if (titleEl) titleEl.textContent = dateStr;
 
   const warnText = dayWarnings.length ? dayWarnings.join("・") : "なし";
+  const caution = cautionMessage(palace, dayWarnings, dateStr);
 
   bodyEl.innerHTML = `
     <div class="day-modal-row">
@@ -1255,14 +1431,21 @@ function openDetail(dateStr){
       <div class="label">今日の吉方位</div>
       <div class="value">${goodDirText}</div>
     </div>
+    ${yukiText ? `
+    <div class="day-modal-row">
+      <div class="label">祐気どり</div>
+      <div class="value">${yukiText}</div>
+    </div>` : ``}
+
 
     <div class="day-modal-row">
       <div class="label">注意（凶作用）</div>
       <div class="value">${warnText}</div>
+      ${caution ? `<div class="day-modal-sub">${escapeHtml(caution)}</div>` : ""}
     </div>
     <div class="day-modal-row">
-      <div class="label">ラッキーナンバー / ラッキーカラー</div>
-      <div class="value">${luckyNumText} ／ ${luckyColorText}</div>
+      <div class="label">吉数 / 吉色 / 吉香</div>
+      <div class="value">${luckyNumText} ／ ${luckyColorText} ／ ${escapeHtml(kikkouOil)}</div>
     </div>
 
     <div class="day-modal-row span2">
