@@ -64,6 +64,33 @@ const monthInput = $("monthInput");
 const backBtn = $("backBtn");
 const helpBtn = $("helpBtn");
 
+
+// ---- URLパラメータで本命星を固定（販売用）----
+// 例: ?star=2 なら二黒土星で固定。
+const FIXED_HONMEI = (() => {
+  try {
+    const v = new URLSearchParams(location.search).get("star");
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
+  } catch(e) {
+    return null;
+  }
+})();
+
+// 固定されている場合はセレクトを隠し、変更不可にする
+if (FIXED_HONMEI && honmeiSelect) {
+  honmeiSelect.value = String(FIXED_HONMEI);
+  honmeiSelect.disabled = true;
+  honmeiSelect.style.display = "none";
+  const label = document.querySelector('label[for="honmeiSelect"]');
+  if (label) label.style.display = "none";
+  // もし親が本命星だけのラッパーなら親も隠す（年月セレクトまで消さないように慎重に）
+  try {
+    const wrap = honmeiSelect.closest('.control') || honmeiSelect.closest('.field') || honmeiSelect.parentElement;
+    if (wrap && wrap.querySelectorAll('select, input').length === 1) wrap.style.display = 'none';
+  } catch(e) {}
+}
+
 const detailDateEl = $("detailDate");
 const refYearEl = $("refYear");
 const refMonthEl = $("refMonth");
@@ -344,6 +371,36 @@ const YEAR_LUCKY_DIRECTIONS = {
     1: { // 一白水星
       preRisshun: ["西","北","南"],            // ～2026-02-03
       postRisshun: ["南西","西","北東"]        // 2026-02-04～
+    },
+    2: { // 二黒土星
+      preRisshun: ["南","北","東"],            // ～2026-02-03
+      postRisshun: ["南西","東"]               // 2026-02-04～
+    }
+  }
+};
+
+
+// ===============================
+// 年運（文章・運勢名・点数）上書き（2026年立春前/後）
+//  - データ(honmei_*.json)の年運を優先するが、ここに定義があれば上書きする
+// ===============================
+const YEAR_FORTUNE_OVERRIDES_2026 = {
+  2: { // 二黒土星
+    preRisshun: {
+      fortuneName: "静観運",
+      score: 50,
+      message: `中心的な存在になる時です。
+実行に移さず静観し、次の年の準備期間です。善事善行を行ってきた人には吉事が、誤った方針を続けてきた人には凶事が極端に現れます。「大変化の年」とも言われ、結婚、転業、独立、移転、増改築、新築などの問題も出てきます。自分の力に応じた行動は、良い結果を招きます。しかし、あちらこちらに手を出すと、八方ふさがりになります。
+（キーワード：内面・内部充実）`
+    },
+    postRisshun: {
+      fortuneName: "強運",
+      score: 85,
+      message: `2026年の運勢は、人々の労をねぎらい施す時で、自分の力が増大し、利益も増大する傾向のある年です。
+目標を再検討し、大きな目標を掲げ、目標に向かって努力すれば、より一層の恵みを得ることができます。
+何事にも行動に移せる年となりますが、柔軟性を忘れずに。何かとチャンスの多い年です。
+忙しい年になりやすいので、体調管理に心がけることが大切です。
+（キーワード：与える心）`
     }
   }
 };
@@ -836,7 +893,26 @@ function inRange(dateStr, range){
 }
 function findYearBlock(dateStr){
   const hit = (data.yearBlocks || []).find(y => inRange(dateStr, y.range));
-  return ensureYearGrid(hit);
+  const base = ensureYearGrid(hit);
+  if(!base) return base;
+
+  // 2026年立春前/後の年運文言・点数を上書き（必要な星だけ）
+  const honmeiNum = Number(honmeiSelect?.value || currentHonmei || 1);
+  const before = (String(dateStr) <= "2026-02-03");
+  const ov = YEAR_FORTUNE_OVERRIDES_2026?.[honmeiNum];
+  if(ov){
+    const pack = before ? ov.preRisshun : ov.postRisshun;
+    if(pack && ((before && String(base.id) === "2025") || (!before && String(base.id) === "2026"))){
+      // 参照を壊さないよう浅いコピーで返す
+      return {
+        ...base,
+        fortuneName: pack.fortuneName ?? base.fortuneName,
+        score: (pack.score ?? base.score),
+        message: pack.message ?? base.message
+      };
+    }
+  }
+  return base;
 }
 function findMonthBlock(dateStr, monthKey){
   // ① idで直指定（range未入力でも拾える）
@@ -872,7 +948,7 @@ function openDialog(title, text){
   dialog.showModal();
 }
 closeDialog?.addEventListener("click", () => dialog.close());
-
+helpBtn?.addEventListener("click", () => openDialog("ヘルプ", "準備中"));
 backBtn?.addEventListener("click", () => {
   detailEl.classList.add("hidden");
   calendarEl.classList.remove("hidden");
@@ -1243,7 +1319,7 @@ function renderMonth(){
   const setsuDay = SETSUIRI_DAY_BY_MONTH[mm] || null;
 
   titleEl.textContent = `${yyyy}年${mm}月`;
-  if(subtitleEl) subtitleEl.textContent = "";
+  if(subtitleEl) subtitleEl.textContent = FIXED_HONMEI ? starNameJP(FIXED_HONMEI) : "";
 
   // トップ盤
   renderTopBoards(yyyy, mm);
@@ -1463,13 +1539,13 @@ const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
 
 // ===== 起動 =====
 async function boot(){
-  currentHonmei = Number(honmeiSelect.value);
+  currentHonmei = (FIXED_HONMEI ?? Number(honmeiSelect.value));
   currentMonth = monthInput.value;
   await loadHonmei(currentHonmei);
   renderMonth();
   setupMemoBelowCalendar();
 }
-honmeiSelect?.addEventListener("change", () => boot().catch(showBootError));
+if(!FIXED_HONMEI){ honmeiSelect?.addEventListener("change", () => boot().catch(showBootError)); }
 monthInput?.addEventListener("change", () => {
   currentMonth = monthInput.value;
   try { renderMonth(); } catch(e){ showBootError(e); }
