@@ -65,6 +65,7 @@ const backBtn = $("backBtn");
 const helpBtn = $("helpBtn");
 
 
+const STAR_NAME_MAP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
 // ---- URLパラメータで本命星を固定（販売用）----
 // 例: ?star=2 なら二黒土星で固定。
 const FIXED_HONMEI = (() => {
@@ -85,11 +86,14 @@ if (FIXED_HONMEI && honmeiSelect) {
   honmeiSelect.disabled = true;
   honmeiSelect.style.display = "none";
 
-  const label = document.querySelector('label[for="honmeiSelect"]');
+  // index.html の label に for 属性が無い場合があるので、セレクトと同じ行の label を拾う
+  const row = honmeiSelect.closest(".row");
+  const label = (row && row.querySelector("label")) || document.querySelector("label[for='honmeiSelect']");
   if (label) {
-    const name = STAR_NAMES?.[FIXED_HONMEI] || `星${FIXED_HONMEI}`;
+    const name = STAR_NAME_MAP[FIXED_HONMEI] || `星${FIXED_HONMEI}`;
     label.style.display = "";
     label.textContent = `本命星：${name}`;
+    label.classList.add("honmei-fixedlabel");
   }
 }
 
@@ -269,6 +273,12 @@ function formatYearMessageSimple(message, isExpanded, yearId = "") {
   let keyword = "";
   let body = (message || "").toString();
 
+  // （キーワード：〇〇）形式の場合は抽出して保持
+  const kmParen = (message || "").toString().match(/（\s*キーワード[:：]\s*([^）]+)）/);
+  if (kmParen) {
+    keyword = (kmParen[1] || "").trim();
+  }
+
   // （キーワード：〇〇）形式も除去
   body = body.replace(/（\s*キーワード[:：]\s*[^）]+）/g, "").trim();
 
@@ -351,6 +361,7 @@ function getMonthPalaceMessage(palace){
 const DIR_LABEL_JP = {N:"北",NE:"北東",E:"東",SE:"東南",S:"南",SW:"南西",W:"西",NW:"北西",C:"中央"};
 
 
+const HONMEI_JP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
 const STAR_NAME_JP = {1:'一白水星',2:'二黒土星',3:'三碧木星',4:'四緑木星',5:'五黄土星',6:'六白金星',7:'七赤金星',8:'八白土星',9:'九紫火星'};
 function starNameJP(n){ return STAR_NAME_JP[Number(n)] || String(n); }
 // ===== 本命星ごとの吉数字（日盤：夢叶手帳ルール）=====
@@ -535,6 +546,23 @@ function getGoodDirsFromGetsuban(board, honmei, monthMarks){
 
 
 // 夢叶手帳：月運点数（本命星ごとに 1〜12月）
+
+// ===== 埋め込みデータ（index.html 内の <script id="honmeiData" type="application/json"> を共通データとして利用） =====
+const EMBEDDED_DATA = (() => {
+  try{
+    const el = document.getElementById("honmeiData");
+    if(!el) return null;
+    const txt = (el.textContent || "").trim();
+    if(!txt) return null;
+    return JSON.parse(txt);
+  }catch(e){
+    console.warn("EMBEDDED_DATA parse failed:", e);
+    return null;
+  }
+})();
+const COMMON_MONTH_BLOCKS = Array.isArray(EMBEDDED_DATA?.monthBlocks) ? EMBEDDED_DATA.monthBlocks : [];
+const COMMON_YEAR_BLOCKS  = Array.isArray(EMBEDDED_DATA?.yearBlocks)  ? EMBEDDED_DATA.yearBlocks  : [];
+
 const MONTH_UNEI_SCORES = {
   1: [55,70,45,45,5,55,70,85,45,70,70,40], // 一白水星
   2: [80,20,45,5,40,65,85,45,70,70,20,35], // 二黒土星
@@ -620,6 +648,24 @@ function monthBadgeBlockHtml(mBlock, mGrid){
     getByPath(mBlock,"board.marks.吉神")
   );
 
+
+// ---- 共通データ（不足時のフォールバック） ----
+const common = (mBlock && mBlock.id && MONTH_BADGE_DATA_2026[mBlock.id]) ? MONTH_BADGE_DATA_2026[mBlock.id] : null;
+
+function renderExplicitLine(label, star, dir){
+  if(!star || !dir) return "";
+  const starName = STAR_NAMES?.[String(star)] || String(star);
+  const dirJp = DIR_LABEL_JP?.[dir] || dir;
+  return `${label}-${starName}（${dirJp}）`;
+}
+
+// tendo/goodGods は「宮→星」ではなく「星＋方位」が指定されるケースがあるため、
+// 共通データがあればそちらを優先して表示する
+const explicitTendoLine = common?.tendo ? renderExplicitLine("天道", common.tendo.star, common.tendo.dir) : "";
+const explicitGoodLines = Array.isArray(common?.goodGods) ? common.goodGods.map(g => renderExplicitLine("吉神", g.star, g.dir)).filter(Boolean) : [];
+const explicitMonthHaLine = common?.monthHa ? renderExplicitLine("月破", common.monthHa.star, common.monthHa.dir) : "";
+
+
   // 入力が「兌」「坎宮」などの“宮名”の場合もあれば、「西」「北東」など“方位”で来る場合もある。
   // どちらでも「宮（兌など）」に正規化して扱う。
   const DIR_JP_TO_DIRKEY = {
@@ -666,12 +712,16 @@ function monthBadgeBlockHtml(mBlock, mGrid){
   };
 
   // 1行目：天道＋吉神（同じ列）
-  const tendoTxt = tendoPalaces.length
+  let tendoTxt = tendoPalaces.length
     ? `天道-${tendoPalaces.map(starDirText).filter(Boolean).join("・")}`
     : "";
-  const goodTxt = goodPalaces.length
+  let goodTxt = goodPalaces.length
     ? `吉神-${goodPalaces.map(starDirText).filter(Boolean).join("・")}`
     : "";
+
+  // 共通データがある場合はそれを優先（星＋方位）
+  if (explicitTendoLine) tendoTxt = explicitTendoLine;
+  if (explicitGoodLines.length) goodTxt = `吉神-${explicitGoodLines.map(s=>s.replace(/^吉神-/, "")).join("・")}`;
 
   // 2行目：暗剣殺・五黄殺・月破（同じ列）
   const gohPal   = normPalace(marks.gohPalace);
@@ -688,7 +738,11 @@ function monthBadgeBlockHtml(mBlock, mGrid){
   const ankenLine = (gohPal === "中") ? "" : (ankenPal ? `暗剣殺-${starDirText(ankenPal)}` : "");
 
   // 月破はデータの方位をそのまま採用（反対補正しない）
-  const haLine = (haType && haPal) ? `${haType}-${starDirText(haPal)}` : "";
+  let haLine = (haType && haPal) ? `${haType}-${starDirText(haPal)}` : "";
+
+  // 共通データ（月破）がある場合は優先
+  const explicitMonthHaTxt = "";
+  if (explicitMonthHaTxt) haLine = explicitMonthHaTxt;
 
   const hasTop = (tendoTxt || goodTxt);
   const hasBottom = (ankenLine || gohLine || haLine);
@@ -1197,6 +1251,13 @@ async function loadHonmei(honmei){
   try{
     const json = await res.json();
     data = json || EMPTY;
+    // 共通データ（monthBlocks / yearBlocks）が入っていない星データは、index.html 埋め込みから補完
+    if(!Array.isArray(data.monthBlocks) || data.monthBlocks.length===0){
+      if(COMMON_MONTH_BLOCKS.length) data.monthBlocks = COMMON_MONTH_BLOCKS;
+    }
+    if(!Array.isArray(data.yearBlocks) || data.yearBlocks.length===0){
+      if(COMMON_YEAR_BLOCKS.length) data.yearBlocks = COMMON_YEAR_BLOCKS;
+    }
     dataLoadError = "";
   }catch(e){
     data = EMPTY;
@@ -1226,11 +1287,33 @@ function dayState(dayScore, dayWarnings){
 function renderTopBoards(yyyy, mm){
   const monthKey = `${yyyy}-${String(mm).padStart(2,"0")}`;
   const monthAfterDate  = getAfterSetsuiriDate(yyyy, mm);
+
   // まず monthBlocks の id で拾う（range未入力でも表示できる）
-  const mBlock = (Array.isArray(data?.monthBlocks)
+  // honmeiデータは「運勢名/点数/文章」中心なので、共通メタ（天道/吉神/月破など）は共通MONTH_BLOCKSから補完する
+  const mBlockUser = (Array.isArray(data?.monthBlocks)
       ? data.monthBlocks.find(b => String(b.id) === String(monthKey))
-      : null)
-    || findMonthBlock(monthAfterDate, monthKey);
+      : null);
+  const mBlockBase = findMonthBlock(monthAfterDate, monthKey) || null;
+
+  const mBlock = (() => {
+    if(!mBlockUser) return mBlockBase;
+    if(!mBlockBase) return mBlockUser;
+
+    const merged = { ...mBlockBase, ...mBlockUser };
+
+    // board を深めにマージ（gridはユーザー優先、marksは両方合成）
+    const bBase = mBlockBase.board || {};
+    const bUser = mBlockUser.board || {};
+    merged.board = { ...bBase, ...bUser };
+    merged.board.marks = { ...(bBase.marks||{}), ...(bUser.marks||{}) };
+
+    // 共通項目の補完（ユーザーに無ければ共通を採用）
+    if(merged.tendo == null && mBlockBase.tendo != null) merged.tendo = mBlockBase.tendo;
+    if(merged.goodGods == null && mBlockBase.goodGods != null) merged.goodGods = mBlockBase.goodGods;
+
+    return merged;
+  })();
+
   // 月盤マーク（暗剣殺/五黄殺/月破など）。データに無い場合でも落ちないように空オブジェクト。
   const monthMarks = (mBlock && mBlock.board && mBlock.board.marks) ? mBlock.board.marks : {};
   const yBlock = findYearBlock(monthAfterDate);
