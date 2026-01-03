@@ -483,3 +483,51 @@ dialog{
 
 /* fixed star mode label */
 .honmei-fixedlabel{ font-size:22px; font-weight:700; letter-spacing:0.02em; }
+
+
+
+/* ===============================
+   今日（枠ハイライトのみ）
+=============================== */
+.dayCell.today{
+  outline: none;
+  border: 2px solid #e0b200;
+  box-shadow: 0 0 10px rgba(224,178,0,.65);
+  background: rgba(255,224,138,.10);
+}
+.dayCell.today::after{ content:none !important; display:none !important; }
+
+
+/* ===============================
+   日付数字を点数と同等サイズに
+=============================== */
+.dayNum{
+  font-size: 20px; /* 点数と同等感 */
+  font-weight: 800;
+  line-height: 1.1;
+}
+@media (max-width: 600px){
+  .dayNum{ font-size: 18px; }
+}
+
+/* ===============================
+   月盤カード：行間の統一（天道〜吉神の間が空きすぎる問題を解消）
+   - カード内の <p> のデフォルトmarginが効いているのが原因なので
+     月盤カード(#monthCard)の中だけ上書きします。
+=============================== */
+#monthCard p,
+#monthCard .line,
+#monthCard .row,
+#monthCard .meta-line,
+#monthCard .month-line {
+  margin: 0 0 6px 0;
+  line-height: 1.55;
+}
+
+#monthCard p:last-child,
+#monthCard .line:last-child,
+#monthCard .row:last-child,
+#monthCard .meta-line:last-child,
+#monthCard .month-line:last-child {
+  margin-bottom: 0;
+}

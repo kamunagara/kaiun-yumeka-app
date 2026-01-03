@@ -66,17 +66,37 @@ const helpBtn = $("helpBtn");
 
 
 const STAR_NAME_MAP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
-// ---- URLパラメータで本命星を固定（販売用）----
-// 例: ?star=2 なら二黒土星で固定。
-const FIXED_HONMEI = (() => {
-  try {
-    const v = new URLSearchParams(location.search).get("star");
-    const n = Number(v);
-    return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
-  } catch(e) {
-    return null;
-  }
+
+/*
+  ★ 星別URL対応
+  - 既存互換： ?star=2 は「販売用（固定）」として従来通り固定表示
+  - 追加：     ?star=2&unlock=1（または free=1）で、初期値だけ star を反映しつつ変更も可能
+  - 参考：     ?month=2026-04（または m=2026-04）は今まで通り月を指定できます
+*/
+const URL_QS = (() => {
+  try { return new URLSearchParams(location.search); } catch(e){ return new URLSearchParams(); }
 })();
+
+const STAR_PARAM = (() => {
+  const v = URL_QS.get("star");
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
+})();
+
+const UNLOCKED = (() => {
+  const u1 = URL_QS.get("unlock");
+  const u2 = URL_QS.get("free");
+  return (u1 === "1" || u1 === "true" || u2 === "1" || u2 === "true");
+})();
+
+// ---- URLパラメータで本命星を固定（販売用）----
+// 既存の挙動：?star=2 は固定。解除したい場合は ?star=2&unlock=1
+const FIXED_HONMEI = (STAR_PARAM && !UNLOCKED) ? STAR_PARAM : null;
+
+// star パラメータがある時は、固定/非固定に関係なく「初期値」に反映
+if (STAR_PARAM && honmeiSelect) {
+  honmeiSelect.value = String(STAR_PARAM);
+}
 
 // 固定されている場合は本命星を固定表示（販売用）
 // - セレクトは非表示＆変更不可
@@ -118,7 +138,53 @@ const closeDialog = $("closeDialog");
 let data = null;
 let dataLoadError = "";
 let currentMonth = "2026-01";
+
+// 年運点数（year_scores_2026.json から読み込む）
+let YEAR_SCORES = null;
+let YEAR_SCORES_PROMISE = null;
 let currentHonmei = 1;
+// ===============================
+// 祐気どり（honmei_1〜9.json からロードしてキャッシュ）
+// ===============================
+let YUKI_CACHE_BY_HONMEI = {}; // { "1": [ {date,times,dirs}, ... ], ... }
+let YUKI_READY = false;
+
+function loadAllYuki(){
+  const tasks = [];
+  for(let h=1; h<=9; h++){
+    const url = `./data/honmei_${h}.json`;
+    tasks.push(
+      fetch(url, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          const list = Array.isArray(j?.yuki) ? j.yuki : [];
+          YUKI_CACHE_BY_HONMEI[String(h)] = list;
+        })
+        .catch(() => {
+          YUKI_CACHE_BY_HONMEI[String(h)] = [];
+        })
+    );
+  }
+  return Promise.all(tasks).then(() => { YUKI_READY = true; });
+}
+
+function getYukidoriForDate(dateStr, honmeiNum){
+  const list = YUKI_CACHE_BY_HONMEI?.[String(honmeiNum)] || [];
+  return list.filter(e => e?.date === dateStr);
+}
+
+function formatYukiText(events){
+  if(!events || events.length === 0) return "";
+  return events.map(e => {
+    const t = Array.isArray(e.times) ? e.times.join(" / ") : "";
+    const d = Array.isArray(e.dirs) ? e.dirs.join("・") : "";
+    if(t && d) return `${t}（${d}）`;
+    if(t) return t;
+    if(d) return d;
+    return "";
+  }).filter(Boolean).join(" / ");
+}
+
 
 // 年運「続きを読む」開閉状態（yearBlocksのidごとに保持）
 const YEAR_MORE_OPEN = Object.create(null);
@@ -181,6 +247,16 @@ function parseISO(iso){
 function formatISO(dateObj){
   return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth()+1)}-${pad2(dateObj.getDate())}`;
 }
+
+function isTodayISO(iso){
+  // iso: "YYYY-MM-DD"
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = pad2(now.getMonth() + 1);
+  const d = pad2(now.getDate());
+  return String(iso) === `${y}-${m}-${d}`;
+}
+
 function jpDate(iso){
   const [y,m,d] = iso.split("-");
   return `${Number(y)}年${Number(m)}月${Number(d)}日`;
@@ -355,7 +431,9 @@ const MONTH_PALACE_MESSAGES = {
 
 function getMonthPalaceMessage(palace){
   const p = normPalace(palace);
-  return p ? (MONTH_PALACE_MESSAGES[p] || null) : null;
+  if(!p) return null;
+  const fromData = data?.monthPalaceMessage?.[p];
+  return fromData || (MONTH_PALACE_MESSAGES[p] || null);
 }
 
 const DIR_LABEL_JP = {N:"北",NE:"北東",E:"東",SE:"東南",S:"南",SW:"南西",W:"西",NW:"北西",C:"中央"};
@@ -421,62 +499,14 @@ const YEAR_FORTUNE_OVERRIDES_2026 = {
 };
 
 // ===============================
-// 祐気どり（データ登録）
-//  - 年に数回のため「計算しない」方針
-//  - date: YYYY-MM-DD
-//  - times: ["HH:MM-HH:MM", ...]（複数枠OK）
-//  - dirs: ["南西","西","東北東", ...]（複数方位OK）
-// ===============================
-const YUKIDORI_EVENTS = {
-  "2026": {
-    1: [ // 一白水星
-      { date:"2026-04-13", times:["15:00-17:00"], dirs:["南西"] },
+// 祐気どり（外部JSONからロード）
 
-      // 5/9, 5/18, 5/27, 6/5：西（1-3 / 19-21）
-      { date:"2026-05-09", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
-      { date:"2026-05-18", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
-      { date:"2026-05-27", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
-      { date:"2026-06-05", times:["01:00-03:00","19:00-21:00"], dirs:["西"] },
-
-      // 6/13：西（5-7）
-      { date:"2026-06-13", times:["05:00-07:00"], dirs:["西"] },
-      // 6/24, 7/3：西（15-17）
-      { date:"2026-06-24", times:["15:00-17:00"], dirs:["西"] },
-      { date:"2026-07-03", times:["15:00-17:00"], dirs:["西"] },
-
-      // 7/13：東北東（11-13）
-      { date:"2026-07-13", times:["11:00-13:00"], dirs:["東北東"] },
-
-      // 8/10, 8/19, 8/28, 9/6：西（7-9）
-      { date:"2026-08-10", times:["07:00-09:00"], dirs:["西"] },
-      { date:"2026-08-19", times:["07:00-09:00"], dirs:["西"] },
-      { date:"2026-08-28", times:["07:00-09:00"], dirs:["西"] },
-      { date:"2026-09-06", times:["07:00-09:00"], dirs:["西"] },
-
-      // 9/7, 9/16, 9/25, 10/4：東北・南西・西（3-5 / 21-23）
-      { date:"2026-09-07", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
-      { date:"2026-09-16", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
-      { date:"2026-09-25", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
-      { date:"2026-10-04", times:["03:00-05:00","21:00-23:00"], dirs:["東北","南西","西"] },
-
-      // 10/14：南西・東北（23-1 / 17-19）
-      { date:"2026-10-14", times:["23:00-01:00","17:00-19:00"], dirs:["南西","東北"] },
-    ]
-  }
-};
-
-function getYukidoriForDate(dateStr, honmeiNum){
-  const year = String(dateStr).slice(0,4);
-  const list = YUKIDORI_EVENTS?.[year]?.[Number(honmeiNum)] || [];
-  return list.filter(e => e.date === dateStr);
+function getYearLuckyDirs(yearBoardObj, honmeiNum, yearMarks){
+  // 年盤の吉方位は、月盤・日盤と同様に「盤上の数（本命星別の吉数）」から選び、
+  // 除外：本命星の反対方位／暗剣殺／五黄殺／歳破
+  return getGoodDirsFromNenban(yearBoardObj, Number(honmeiNum), yearMarks || {});
 }
 
-function getYearLuckyDirs(yearNum, honmeiNum, dateStr){
-  const y = YEAR_LUCKY_DIRECTIONS?.[String(yearNum)]?.[Number(honmeiNum)];
-  if (!y) return [];
-  const before = (String(dateStr) <= "2026-02-03"); // 2026年の立春前判定
-  return before ? (y.preRisshun||[]) : (y.postRisshun||[]);
-}
 
 // 日破の「方位キー(N/NE/...)」を返す（※吉方位除外用：本命星に関係なく常に除外）
 function getNichihaDirByDate(dateObj){
@@ -542,6 +572,36 @@ function getGoodDirsFromGetsuban(board, honmei, monthMarks){
   }
   return out;
 }
+
+function getGoodDirsFromNenban(board, honmei, yearMarks){
+  if(!board) return [];
+  const goodNums = new Set(GOOD_NUMS_BY_HONMEI[honmei] || []);
+  const DIRS_8 = ["N","NE","E","SE","S","SW","W","NW"]; // 中央は除外
+
+  const honmeiDir = findDirOfStar(board, honmei);
+  const excludeOpp = (honmeiDir && honmeiDir !== "C") ? oppositeDir(honmeiDir) : null;
+
+  // 五黄殺・暗剣殺（年盤）は 5 の位置とその反対で決める
+  const gohDir = findDirOfStar(board, 5);
+  const ankenDir = (gohDir && gohDir !== "C") ? oppositeDir(gohDir) : null;
+
+  // 歳破（または破の宮）を除外
+  const saihaPal = yearMarks?.saihaPalace || yearMarks?.haPalace || yearMarks?.saiha || null;
+  const saihaDir = saihaPal ? (PALACE_TO_DIR[saihaPal] || null) : null;
+
+  const out = [];
+  for(const dir of DIRS_8){
+    const num = Number(board[dir]);
+    if(!goodNums.has(num)) continue;
+    if(excludeOpp && dir === excludeOpp) continue;
+    if(ankenDir && dir === ankenDir) continue;
+    if(gohDir && dir === gohDir) continue;
+    if(saihaDir && dir === saihaDir) continue;
+    out.push(dir);
+  }
+  return out;
+}
+
 
 
 
@@ -1224,9 +1284,79 @@ function luckyInfoByPalace(palace){
   };
 }
 // ===== データ読み込み =====
+// 共通データ（年盤/月盤/年運メッセージ/宮ごとの月運メッセージ）を先に読み込んで、星別JSONに不足があれば補完する
+let COMMON_DATA = null;
+let COMMON_DATA_PROMISE = null;
+
+function loadCommonData(){
+  if(COMMON_DATA) return Promise.resolve(COMMON_DATA);
+  if(COMMON_DATA_PROMISE) return COMMON_DATA_PROMISE;
+
+  const url = "./data/honmei_common_2026.json";
+  COMMON_DATA_PROMISE = fetch(url, { cache: "no-store" })
+    .then(r => {
+      if(!r.ok) throw new Error(`共通データが見つかりません: ${url}（HTTP ${r.status}）`);
+      return r.json();
+    })
+    .then(j => {
+      COMMON_DATA = j || null;
+      return COMMON_DATA;
+    })
+    .catch(e => {
+      console.warn("COMMON_DATA load failed:", e);
+      COMMON_DATA = null;
+      return null;
+    });
+
+  return COMMON_DATA_PROMISE;
+}
+
+function mergeCommonIntoData(starData, common){
+  const d = starData || {};
+  if(common){
+    if((!Array.isArray(d.monthBlocks) || d.monthBlocks.length===0) && Array.isArray(common.monthBlocks)) d.monthBlocks = common.monthBlocks;
+    if((!Array.isArray(d.yearBlocks)  || d.yearBlocks.length===0)  && Array.isArray(common.yearBlocks))  d.yearBlocks  = common.yearBlocks;
+    if(!d.yearFortuneByPalace && common.yearFortuneByPalace) d.yearFortuneByPalace = common.yearFortuneByPalace;
+    if(!d.monthPalaceMessage  && common.monthPalaceMessage)  d.monthPalaceMessage  = common.monthPalaceMessage;
+  }
+  return d;
+}
+
+
+
+// 年運点数データを読み込む（存在しない場合でも落とさない）
+function loadYearScoresData(){
+  if(YEAR_SCORES) return Promise.resolve(YEAR_SCORES);
+  if(YEAR_SCORES_PROMISE) return YEAR_SCORES_PROMISE;
+
+  const url = "./data/year_scores_2026.json";
+  YEAR_SCORES_PROMISE = fetch(url, { cache: "no-store" })
+    .then(r => (r.ok ? r.json() : {}))
+    .then(j => {
+      YEAR_SCORES = j || {};
+      return YEAR_SCORES;
+    })
+    .catch(() => {
+      YEAR_SCORES = {};
+      return YEAR_SCORES;
+    });
+
+  return YEAR_SCORES_PROMISE;
+}
+
+// 年運点数を取得（yearId は "2025" など / honmei は 1〜9）
+function getYearUneiScore(yearId, honmei){
+  const y = String(yearId || "");
+  const h = String(honmei || "");
+  return YEAR_SCORES?.[y]?.[h] ?? "";
+}
+
 async function loadHonmei(honmei){
   const h = Number(honmei);
   const url = `./data/honmei_${h}.json`;
+
+  // 共通JSONを先読み（失敗しても続行）
+  const common = await loadCommonData();
 
   // 既定の空データ（読み込み失敗でも画面が崩れないように）
   const EMPTY = { yearBlocks: [], monthBlocks: [], yuki: [] };
@@ -1251,6 +1381,7 @@ async function loadHonmei(honmei){
   try{
     const json = await res.json();
     data = json || EMPTY;
+    data = mergeCommonIntoData(data, common);
     // 共通データ（monthBlocks / yearBlocks）が入っていない星データは、index.html 埋め込みから補完
     if(!Array.isArray(data.monthBlocks) || data.monthBlocks.length===0){
       if(COMMON_MONTH_BLOCKS.length) data.monthBlocks = COMMON_MONTH_BLOCKS;
@@ -1325,6 +1456,21 @@ function renderTopBoards(yyyy, mm){
   const yGrid = yGridRaw;
   const mGrid = mGridRaw;
 
+
+// 年運（宮ごと共通）：年盤で本命星が入る宮をキーに yearFortuneByPalace から取得
+const honmei = Number(honmeiSelect?.value || 1);
+const honmeiPalY = yGrid ? palaceOfStarMonth(yGrid, honmei) : null;
+const yFortSrc = data?.yearFortuneByPalace;
+let yPack = null;
+if(yFortSrc && honmeiPalY){
+  // 形式A: { "坎": {...}, ... } / 形式B: { "2025": { "坎": {...}}, ... }
+  yPack = (yFortSrc?.[String(yBlock?.id ?? "")]?.[honmeiPalY]) ?? (yFortSrc?.[honmeiPalY]) ?? null;
+}
+const yearFortuneName = (yPack?.fortuneName ?? "");
+  const yearBodyText = (yPack?.text ?? yPack?.message ?? "");
+  const yearMessageText = (yearBodyText ? yearBodyText : "") + (yPack?.keyword ? `（キーワード：${yPack.keyword}）` : "");
+
+
   const yearTitle = `年盤（${yBlock?.id ?? "—"}年）（${jpDate(yBlock?.range?.end ?? "2026-02-03")}まで）`;
   const monthLabelRaw = (mBlock?.label ?? "—");
   const monthLabel = monthLabelRaw.replace(/（節入り）/g, "");
@@ -1341,11 +1487,12 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
 
 
   // 表示用（本命星×月）点数＆運名：データが無い月はここで自動補完
-  const honmei = Number(honmeiSelect?.value || 1);
-  const yearLuckyDirs = getYearLuckyDirs(yyyy, honmei, monthAfterDate);
-  const yearLuckyText = yearLuckyDirs.length ? yearLuckyDirs.join("・") : "—";
-  const yearLuckLabel  = (yBlock?.fortuneName ?? "") || getLuckLabelFromGrid(yGrid, honmei);
-  const yearScoreVal   = (yBlock?.score ?? "");
+  const yearBoardObjForKichi = yGrid ? gridToBoardObj(yGrid) : null;
+  const yearMarks = yBlock?.board?.marks || {};
+  const yearGoodDirs = getGoodDirsFromNenban(yearBoardObjForKichi, honmei, yearMarks);
+  const yearLuckyText = yearGoodDirs.length ? yearGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
+  const yearLuckLabel  = (yearFortuneName || (yBlock?.fortuneName ?? "")) || getLuckLabelFromGrid(yGrid, honmei);
+  const yearScoreVal   = (getYearUneiScore(yBlock?.id ?? "", honmei) || (yBlock?.score ?? ""));
   const monthLuckLabel = (mBlock?.fortuneName ?? "") || (mGrid ? getLuckLabelFromGrid(mGrid, honmei) : "") || "";
   const monthScoreVal  = (mBlock?.score ?? "") || (getMonthUneiScore(honmei, mm) ?? "");
 
@@ -1386,7 +1533,7 @@ const yearHtml = `
       </div>
       <div class="boardBody">
         ${yGrid ? boardSvg(gridToBoardObj(yGrid), yearGohDir, yearAnkenDir, false, YEAR_BAD_PURPLE) : `<div class="boardText">※年盤データがありません</div>`}
-        <div class="boardText">${formatYearMessageSimple(yBlock?.message ?? "", yExpanded, yBlock?.id ?? "")}
+        <div class="boardText">${formatYearMessageSimple(yearMessageText || (yBlock?.message ?? ""), yExpanded, yBlock?.id ?? "")}
           <div class="yearKeyword">（吉方位：${escapeHtml(yearLuckyText)}）</div>
         </div>
       </div>
@@ -1513,7 +1660,7 @@ function renderMonth(){
     const isSetsuiri = (setsuDay != null && d === setsuDay);
 
     const cell = document.createElement("div");
-    cell.className = `dayCell state-${state}${isSetsuiri ? " setsuiri" : ""}${hasYuki ? " yuki" : ""}`;
+    cell.className = `dayCell state-${state}${isSetsuiri ? " setsuiri" : ""}${hasYuki ? " yuki" : ""}${isTodayISO(dateStr) ? " today" : ""}`;
     cell.innerHTML = `
       <div class="topRow">
         <div class="topLeft">
@@ -1647,16 +1794,49 @@ const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
   modal.style.display = "flex";
 }
 
+
+function getTodayMonthId(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  return `${y}-${m}`;
+}
+
 // ===== 起動 =====
 async function boot(){
   currentHonmei = (FIXED_HONMEI ?? Number(honmeiSelect.value));
-  currentMonth = monthInput.value;
+  // 初期表示の月：URL指定があれば優先、なければ「今日の月」
+  const qs = new URLSearchParams(location.search);
+  const qMonth = qs.get("month") || qs.get("m");
+  const todayMonth = getTodayMonthId();
+  const initMonth = (qMonth && /^\d{4}-\d{2}$/.test(qMonth)) ? qMonth : todayMonth;
+
+  if (monthInput) monthInput.value = initMonth;
+  currentMonth = initMonth;
+
+  await loadYearScoresData();
+  await loadAllYuki();
   await loadHonmei(currentHonmei);
   renderMonth();
   setupMemoBelowCalendar();
 }
-if(!FIXED_HONMEI){ honmeiSelect?.addEventListener("change", () => boot().catch(showBootError)); }
+if(!FIXED_HONMEI){
+  honmeiSelect?.addEventListener("change", () => {
+    // 星を変えたら URL も追従（共有URLが作れる）
+    try{
+      const qs = new URLSearchParams(location.search);
+      qs.set("star", String(Number(honmeiSelect.value)));
+      const newUrl = `${location.pathname}?${qs.toString()}`;
+      history.replaceState(null, "", newUrl);
+    }catch(e){}
+    boot().catch(showBootError);
+  });
+} else {
+  // 固定表示のときは、URLに star がある前提（販売用）
+}
+
 monthInput?.addEventListener("change", () => {
+
   currentMonth = monthInput.value;
   try { renderMonth(); } catch(e){ showBootError(e); }
 });
@@ -1839,3 +2019,8 @@ function makeNichiban2026(date){
     // ignore
   }
 })();
+
+// 初期起動
+window.addEventListener('DOMContentLoaded', () => {
+  try{ boot().catch(showBootError); }catch(e){ showBootError(e); }
+});
