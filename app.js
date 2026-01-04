@@ -66,37 +66,17 @@ const helpBtn = $("helpBtn");
 
 
 const STAR_NAME_MAP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
-
-/*
-  ★ 星別URL対応
-  - 既存互換： ?star=2 は「販売用（固定）」として従来通り固定表示
-  - 追加：     ?star=2&unlock=1（または free=1）で、初期値だけ star を反映しつつ変更も可能
-  - 参考：     ?month=2026-04（または m=2026-04）は今まで通り月を指定できます
-*/
-const URL_QS = (() => {
-  try { return new URLSearchParams(location.search); } catch(e){ return new URLSearchParams(); }
-})();
-
-const STAR_PARAM = (() => {
-  const v = URL_QS.get("star");
-  const n = Number(v);
-  return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
-})();
-
-const UNLOCKED = (() => {
-  const u1 = URL_QS.get("unlock");
-  const u2 = URL_QS.get("free");
-  return (u1 === "1" || u1 === "true" || u2 === "1" || u2 === "true");
-})();
-
 // ---- URLパラメータで本命星を固定（販売用）----
-// 既存の挙動：?star=2 は固定。解除したい場合は ?star=2&unlock=1
-const FIXED_HONMEI = (STAR_PARAM && !UNLOCKED) ? STAR_PARAM : null;
-
-// star パラメータがある時は、固定/非固定に関係なく「初期値」に反映
-if (STAR_PARAM && honmeiSelect) {
-  honmeiSelect.value = String(STAR_PARAM);
-}
+// 例: ?star=2 なら二黒土星で固定。
+const FIXED_HONMEI = (() => {
+  try {
+    const v = new URLSearchParams(location.search).get("star");
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
+  } catch(e) {
+    return null;
+  }
+})();
 
 // 固定されている場合は本命星を固定表示（販売用）
 // - セレクトは非表示＆変更不可
@@ -256,6 +236,66 @@ function isTodayISO(iso){
   const d = pad2(now.getDate());
   return String(iso) === `${y}-${m}-${d}`;
 }
+
+
+
+function normalizeMonthId(v){
+  // Accept "2026-2" / "2026-02" / with spaces
+  const s = String(v ?? "").trim();
+  const m = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const y = m[1];
+    const mm = String(Number(m[2])).padStart(2,"0");
+    return `${y}-${mm}`;
+  }
+  return s;
+}
+
+
+function formatRangeFromBlock(block, fallbackMonthId){
+  const s = block?.range?.start || block?.start || block?.startDate || block?.start_day || block?.startDay;
+  const e = block?.range?.end   || block?.end   || block?.endDate   || block?.end_day   || block?.endDay;
+  if (s && e) {
+    const [sy,sm,sd] = String(s).split("-");
+    const [ey,em,ed] = String(e).split("-");
+    if (sy === ey) return `${Number(sy)}年${Number(sm)}月${Number(sd)}日～${Number(em)}月${Number(ed)}日`;
+    return `${Number(sy)}年${Number(sm)}月${Number(sd)}日～${Number(ey)}年${Number(em)}月${Number(ed)}日`;
+  }
+  return formatMonthRange(fallbackMonthId || currentMonth);
+}
+
+function formatMonthRange(monthId){
+  // monthId: "2026-01" など
+  const id = normalizeMonthId(monthId);
+// 共通JSON（埋め込み）を最優先で参照
+  const fromCommon = (Array.isArray(COMMON_MONTH_BLOCKS) ? COMMON_MONTH_BLOCKS : [])
+    .find(b => String(b.id) === id);
+
+  // 念のため：直近に読み込んだデータ側にも monthBlocks があれば参照（互換）
+  const fromRuntime = (Array.isArray(window.__APP_DATA__?.monthBlocks) ? window.__APP_DATA__.monthBlocks : [])
+    .find(b => String(b.id) === id);
+
+  const mObj = fromCommon || fromRuntime || null;
+
+  // range: {start:"YYYY-MM-DD", end:"YYYY-MM-DD"} を使う
+  const s = mObj?.range?.start || mObj?.start || mObj?.startDate || mObj?.start_day || mObj?.startDay;
+  const e = mObj?.range?.end   || mObj?.end   || mObj?.endDate   || mObj?.end_day   || mObj?.endDay;
+
+  if (s && e) {
+    const [sy,sm,sd] = String(s).split("-");
+    const [ey,em,ed] = String(e).split("-");
+    // 同年なら年は開始側のみ
+    if (sy === ey) {
+      return `${Number(sy)}年${Number(sm)}月${Number(sd)}日～${Number(em)}月${Number(ed)}日`;
+    }
+    return `${Number(sy)}年${Number(sm)}月${Number(sd)}日～${Number(ey)}年${Number(em)}月${Number(ed)}日`;
+  }
+
+  // フォールバック：月だけ
+  const [y,m] = id.split("-");
+  return `${Number(y)}年${Number(m)}月`;
+}
+
 
 function jpDate(iso){
   const [y,m,d] = iso.split("-");
@@ -1471,10 +1511,8 @@ const yearFortuneName = (yPack?.fortuneName ?? "");
   const yearMessageText = (yearBodyText ? yearBodyText : "") + (yPack?.keyword ? `（キーワード：${yPack.keyword}）` : "");
 
 
-  const yearTitle = `年盤（${yBlock?.id ?? "—"}年）（${jpDate(yBlock?.range?.end ?? "2026-02-03")}まで）`;
-  const monthLabelRaw = (mBlock?.label ?? "—");
-  const monthLabel = monthLabelRaw.replace(/（節入り）/g, "");
-  const monthTitle = `月盤（${monthLabel}）`;
+  const yearTitle = `年運（${jpDate(yBlock?.range?.start ?? "2025-02-03")}～${jpDate(yBlock?.range?.end ?? "2026-02-03")}）`;
+  const monthTitle = `月運（${formatRangeFromBlock(mBlock, currentMonth)}）`;
 // 年盤の紫（五黄殺・暗剣殺）は「方位キー」にして boardSvg へ渡す
 // 五黄殺/暗剣殺（年盤・月盤）は grid の中の「5」とその向かいで決める（marks は使わない）
 const yBoardObj = safeGridToBoardObj(yGrid);
@@ -1670,7 +1708,7 @@ function renderMonth(){
           ${hasYuki ? `<span class="yukiMini" style="display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(255,192,203,0.9);color:#b85c7a;background:rgba(255,240,245,0.9);margin-left:4px;">祐</span>` : ``}
           <div class="stateBadge">${state}</div>
         </div>
-        <div class="scoreNum">${dayScore}</div>
+        <div class="scoreNum">${(dayScore!=="" && dayScore!=null) ? (dayScore + "点") : ""}</div>
       </div>
       <div class="oct-board">${boardSvg(board, monthGohDir, monthAnkenDir, true, MONTH_BAD_GREEN)}</div>
     `;
@@ -1812,7 +1850,7 @@ async function boot(){
   const initMonth = (qMonth && /^\d{4}-\d{2}$/.test(qMonth)) ? qMonth : todayMonth;
 
   if (monthInput) monthInput.value = initMonth;
-  currentMonth = initMonth;
+  currentMonth = normalizeMonthId(initMonth);
 
   await loadYearScoresData();
   await loadAllYuki();
@@ -1820,24 +1858,18 @@ async function boot(){
   renderMonth();
   setupMemoBelowCalendar();
 }
-if(!FIXED_HONMEI){
-  honmeiSelect?.addEventListener("change", () => {
-    // 星を変えたら URL も追従（共有URLが作れる）
-    try{
-      const qs = new URLSearchParams(location.search);
-      qs.set("star", String(Number(honmeiSelect.value)));
-      const newUrl = `${location.pathname}?${qs.toString()}`;
-      history.replaceState(null, "", newUrl);
-    }catch(e){}
-    boot().catch(showBootError);
-  });
-} else {
-  // 固定表示のときは、URLに star がある前提（販売用）
-}
-
+if(!FIXED_HONMEI){ honmeiSelect?.addEventListener("change", () => boot().catch(showBootError)); }
 monthInput?.addEventListener("change", () => {
+  // ★2026年版固定：他の年が選ばれても2026年に戻す
+  if (monthInput && monthInput.value) {
+    const v = monthInput.value;
+    if (/^\d{4}-\d{2}$/.test(v) && !v.startsWith("2026-")) {
+      const mm = v.slice(5,7);
+      monthInput.value = `2026-${mm}`;
+    }
+  }
 
-  currentMonth = monthInput.value;
+  currentMonth = normalizeMonthId(monthInput.value);
   try { renderMonth(); } catch(e){ showBootError(e); }
 });
 
@@ -1891,7 +1923,7 @@ function boardSvg(b, badDir1, badDir2, showDayBad = true, badFill = "rgba(180, 2
     const isMonthBad = (dir && (dir === badDir1 || dir === badDir2));
     const isDayBad = showDayBad && (dir && (dir === gohDir || dir === ankenDir));
 
-    // 優先：日盤（水色） > 月盤（薄緑）
+    // 優先：日盤（水色） > 月運（薄緑）
     let fill = "transparent";
     if(isDayBad) fill = DAY_BAD_BLUE;
     else if(isMonthBad) fill = badFill;
