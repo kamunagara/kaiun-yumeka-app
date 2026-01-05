@@ -9,6 +9,24 @@
 <meta property="og:description" content="九星気学で毎日の流れを読み解く、あなただけの開運カレンダー">
 <meta property="og:image" content="https://kamunagara.github.io/kaiun-yumeka-app/ogp.png">
   <link rel="stylesheet" href="style.css" />
+
+  <style>
+    .dirChip{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.25);
+      cursor:pointer;
+      font-weight:700;
+      font-size:0.95em;
+      user-select:none;
+    }
+    .dirChip.good{ background:rgba(255,255,255,.10); }
+    .dirChip.bad{ background:rgba(255,255,255,.04); border-style:dashed; }
+    .dirChip:hover{ filter:brightness(1.15); }
+    .dirMiniLabel{ opacity:.85; font-size:13px; margin-right:6px; font-weight:700; }
+  </style>
+
 </head>
 <body>
   <header class="top">

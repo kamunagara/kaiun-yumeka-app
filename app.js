@@ -322,6 +322,24 @@ function findDirOfStar(board, star){
   return null;
 }
 
+// ===== 盤(board: 方位→星) から、凶方位（五黄がいる方位/向かい＋本命星がいる方位/向かい）を返す =====
+function getBadDirsFromBoard(board, honmei){
+  if(!board) return [];
+  const gohDir = findDirOfStar(board, 5);
+  const honDir = findDirOfStar(board, Number(honmei));
+  const dirs = [gohDir, oppositeDir(gohDir), honDir, oppositeDir(honDir)]
+    .filter(Boolean)
+    .filter(d => d !== "C");
+  // 重複除去（順序は保持）
+  return Array.from(new Set(dirs));
+}
+
+function formatDirsJP(dirKeys){
+  if(!dirKeys || !dirKeys.length) return "—";
+  return dirKeys.map(d => DIR_LABEL_JP[d] || d).join("・");
+}
+
+
 // 日盤(board: 方位→星) から、その日の「宮」を推定（本命星がいる宮）
 function inferPalaceFromNichiban(board, honmei){
   const dir = findDirOfStar(board, honmei);
@@ -477,6 +495,101 @@ function getMonthPalaceMessage(palace){
 }
 
 const DIR_LABEL_JP = {N:"北",NE:"北東",E:"東",SE:"東南",S:"南",SW:"南西",W:"西",NW:"北西",C:"中央"};
+
+// ===== 方位タップ：ワンポイント（吉/凶） =====
+const DIR_TIPS = {
+  N:  { good: "休息と内省に向く。無理をしない。", bad: "不安を広げない。考えすぎ注意。" },
+  NE: { good: "準備・整理・区切りに最適。", bad: "曖昧なまま進めない。" },
+  E:  { good: "スタート・発信が吉。朝の行動◎", bad: "勢い任せで決めない。" },
+  SE: { good: "ご縁・交渉が進みやすい。", bad: "言質を取られやすい。慎重に。" },
+  S:  { good: "表現・注目を活かす。", bad: "感情的にならない。" },
+  SW: { good: "人間関係・支え合い◎", bad: "抱え込みすぎない。" },
+  W:  { good: "楽しみ・収穫を味わう。", bad: "衝動買い・軽口注意。" },
+  NW: { good: "決断・責任を果たす。", bad: "独断にならない。" }
+};
+
+// 祐気どりで得られる運（宮＝方位の運）
+const DIR_FORTUNE = {
+  SE: ["結婚運アップ","良縁運アップ","人気運アップ","人間関係のゴタゴタ解消","援助が増える","呼吸器系が丈夫に"],
+  S:  ["各種運アップ","発明運アップ","洗練される","方向性がハッキリする","悪縁が離れていく","心臓が丈夫に"],
+  SW: ["仕事運アップ","不動産運アップ","集中力アップ","心が穏やかに","家庭円満","胃腸が健康に"],
+  E:  ["発展運アップ","緊張感が高まる","才能運アップ","モヤモヤ解消","滞り解消","足が丈夫に"],
+  W:  ["恋人運アップ","金運アップ","商売運アップ","楽天的になれる","コミュニティが広がる","口下手が改善","呼吸器系が丈夫に"],
+  NE: ["相続運アップ","不動産運アップ","子ども運アップ","理想の自分へ変わる","後継者が現れる","悩み事が解決","関節が楽に"],
+  N:  ["人脈運アップ","恋愛運アップ","子ども運アップ","男女関係が良好に","夫婦円満","商売繁盛","心が回復"],
+  NW: ["試験運アップ","財運アップ","子ども運アップ","努力が報われる","心が豊かになる","有益な人とのご縁","健康意識が高まる"]
+};
+
+// 回座している星の運（九星の運）
+const STAR_FORTUNE = {
+  1: ["人脈運アップ","恋愛運アップ","子ども運アップ","心の回復"],
+  2: ["仕事運アップ","不動産運アップ","家庭円満","胃腸が整う"],
+  3: ["発展運アップ","才能運アップ","モヤモヤ解消","行動力アップ"],
+  4: ["良縁運アップ","結婚運アップ","人気運アップ","援助が増える"],
+  5: ["運気の転換","リセットと再出発","土台を整える"],
+  6: ["試験運アップ","財運アップ","有益な人とのご縁","健康意識が高まる"],
+  7: ["恋人運アップ","金運アップ","商売運アップ","コミュニティが広がる"],
+  8: ["相続運アップ","不動産運アップ","後継者運","悩み事が解決"],
+  9: ["各種運アップ","発明運アップ","方向性がハッキリする","名誉運アップ"]
+};
+
+
+
+function renderDirChips(dirKeys, kind, scope, grid){
+  if(!Array.isArray(dirKeys) || dirKeys.length===0) return "—";
+  return dirKeys
+    .filter(Boolean)
+    .map(d => {
+      const pal = DIR_TO_PALACE[d];
+      const star = (grid && pal) ? starInPalace(grid, pal) : null;
+      const starAttr = (star!=null) ? ` data-star="${star}"` : "";
+      const scopeAttr = scope ? ` data-scope="${scope}"` : "";
+      return `<span class="dirChip ${kind}" data-dir="${d}" data-kind="${kind}"${scopeAttr}${starAttr}>${DIR_LABEL_JP[d] ?? d}</span>`;
+    })
+    .join("・");
+}
+
+
+function openDirTip(dirKey, kind, scope, star){
+  const jp = DIR_LABEL_JP[dirKey] ?? dirKey;
+  const isGood = kind === "good";
+  const title = `${jp}（${isGood ? "吉方位" : "凶方位"}）ワンポイント`;
+  const tip = (DIR_TIPS?.[dirKey]?.[isGood ? "good" : "bad"]) || "";
+
+  // 吉方位のときだけ：「祐気どりで得られる運」を追加表示
+  let html = tip ? `<div>${escapeHtml(tip)}</div>` : "";
+
+  if(isGood){
+    const dirList  = DIR_FORTUNE?.[dirKey] || [];
+    const starNum  = (star!=null && star!=="") ? Number(star) : null;
+    const starList = (starNum && STAR_FORTUNE?.[starNum]) ? STAR_FORTUNE[starNum] : [];
+
+    if(dirList.length || starList.length){
+      const starJp = starNum ? (HONMEI_JP?.[starNum] || `${starNum}`) : "";
+      const sub1 = dirList.length ? `<div class="small" style="margin-top:10px; opacity:.9;">■ ${jp}（${DIR_TO_PALACE[dirKey] || "宮"}）で得られる運</div>
+<ul class="dirFortuneList">${dirList.map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+      const sub2 = (starList.length && starJp) ? `<div class="small" style="margin-top:8px; opacity:.9;">■ 回座星「${escapeHtml(starJp)}」で得られる運</div>
+<ul class="dirFortuneList">${starList.map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+      html += `${sub1}${sub2}`;
+    }
+  }
+
+  if(!html) html = "—";
+  openDialog(title, html, { html: true });
+}
+
+// イベント委任：方位チップをタップしたらワンポイント表示
+document.addEventListener("click", (ev) => {
+  const chip = ev.target?.closest?.(".dirChip");
+  if(!chip) return;
+  const dirKey = chip.getAttribute("data-dir");
+  const kind = chip.getAttribute("data-kind") || "good";
+  const scope = chip.getAttribute("data-scope") || "";
+  const star = chip.getAttribute("data-star") || "";
+  if(!dirKey) return;
+  openDirTip(dirKey, kind, scope, star);
+});
+
 
 
 const HONMEI_JP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
@@ -1106,9 +1219,14 @@ function memoKey(dateStr){
 }
 
 // ===== UI =====
-function openDialog(title, text){
+function openDialog(title, text, opt){
   dialogTitle.textContent = title;
-  dialogText.textContent = text;
+  const useHtml = !!(opt && opt.html);
+  if(useHtml){
+    dialogText.innerHTML = text;
+  } else {
+    dialogText.textContent = text;
+  }
   dialog.showModal();
 }
 closeDialog?.addEventListener("click", () => dialog.close());
@@ -1529,6 +1647,10 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
   const yearMarks = yBlock?.board?.marks || {};
   const yearGoodDirs = getGoodDirsFromNenban(yearBoardObjForKichi, honmei, yearMarks);
   const yearLuckyText = yearGoodDirs.length ? yearGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
+  const yearLuckyHtml = renderDirChips(yearGoodDirs, "good", "year", yGrid);
+  const yearBadDirs = getBadDirsFromBoard(yearBoardObjForKichi, honmei);
+  const yearBadText = formatDirsJP(yearBadDirs);
+  const yearBadHtml = renderDirChips(yearBadDirs, "bad", "year", yGrid);
   const yearLuckLabel  = (yearFortuneName || (yBlock?.fortuneName ?? "")) || getLuckLabelFromGrid(yGrid, honmei);
   const yearScoreVal   = (getYearUneiScore(yBlock?.id ?? "", honmei) || (yBlock?.score ?? ""));
   const monthLuckLabel = (mBlock?.fortuneName ?? "") || (mGrid ? getLuckLabelFromGrid(mGrid, honmei) : "") || "";
@@ -1540,6 +1662,7 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
 
   // 月の吉方位表示（日盤と同ルール）
   let kichiText = "—";
+  let kyoText = "—";
 
   // 月盤ヘッダ用バッジ（ア=暗剣殺 / 破=月破 / 天=天道 / 吉=吉神）
   // 暗剣殺は月盤の marks から（無ければ表示用 mGrid から自動算出）
@@ -1552,6 +1675,10 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
   const monthBoardObj = mGrid ? gridToBoardObj(mGrid) : null;
   const monthGoodDirs = getGoodDirsFromGetsuban(monthBoardObj, honmei, monthMarksCalc || {});
   kichiText = monthGoodDirs.length ? monthGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
+  const kichiHtml = renderDirChips(monthGoodDirs, "good", "month", mGrid);
+  const monthBadDirs = getBadDirsFromBoard(monthBoardObj, honmei);
+  kyoText = formatDirsJP(monthBadDirs);
+  const kyoHtml = renderDirChips(monthBadDirs, "bad", "month", mGrid);
 
 // ■ 月盤カード右上：バッジ（暗剣殺／五黄殺／月破(haType)／天道／吉神）
   // ※ まずは MONTH_BADGE_DATA_2026 に入力したものだけを表示（未入力月は何も表示しない）
@@ -1572,7 +1699,7 @@ const yearHtml = `
       <div class="boardBody">
         ${yGrid ? boardSvg(gridToBoardObj(yGrid), yearGohDir, yearAnkenDir, false, YEAR_BAD_PURPLE) : `<div class="boardText">※年盤データがありません</div>`}
         <div class="boardText">${formatYearMessageSimple(yearMessageText || (yBlock?.message ?? ""), yExpanded, yBlock?.id ?? "")}
-          <div class="yearKeyword">（吉方位：${escapeHtml(yearLuckyText)}）</div>
+          <div class="yearKeyword">（吉方位：${yearLuckyHtml}／凶方位：${yearBadHtml}）</div>
         </div>
       </div>
     </div>
@@ -1594,7 +1721,7 @@ const yearHtml = `
   <div><b>今月の伸ばし方：</b>${(Array.isArray(mMsg?.good) ? mMsg.good.join("／") : (mBlock?.message?.good?.[0] ?? ""))}</div>
   <div><b>注意：</b>${mMsg?.caution ?? (mBlock?.message?.caution?.[0] ?? "")}</div>
   <div><b>開運アクション：</b>${mMsg?.action ?? (mBlock?.message?.action?.[0] ?? "")}</div>
-  <div><b>吉方位：</b>${kichiText || "—"}</div>
+  <div><b>吉方位：</b>${kichiHtml}　<b>凶方位：</b>${kyoHtml}</div>
 </div>
       </div>
     </div>
@@ -1755,6 +1882,10 @@ function openDetail(dateStr){
   const haDir = getNichihaDirByDate(dObj);
   const goodDirs = getGoodDirsFromNichiban(board, Number(currentHonmei), haDir);
   const goodDirText = goodDirs.length ? goodDirs.map(d => DIR_LABEL_JP[d] || d).join("・") : "なし";
+  const goodDirHtml = renderDirChips(goodDirs, "good", "day", board?.grid);
+  const badDirs = getBadDirsFromBoard(board, Number(currentHonmei));
+  const badDirText = formatDirsJP(badDirs);
+  const badDirHtml = renderDirChips(badDirs, "bad", "day", board?.grid);
 const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
   const yukiText = yukiList.length
     ? yukiList.map(e => {
@@ -1802,9 +1933,12 @@ const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
       <div class="label">今日の運勢</div>
       <div class="value">${dayScore}点</div>
     </div>
-    <div class="day-modal-row">
-      <div class="label">今日の吉方位</div>
-      <div class="value">${goodDirText}</div>
+    <div class="day-modal-row span2">
+      <div class="label">吉方位/凶方位（タップでワンポイント）</div>
+      <div class="value">
+        <div><span class="dirMiniLabel">吉：</span>${goodDirHtml}</div>
+        <div style="margin-top:6px;"><span class="dirMiniLabel">凶：</span>${badDirHtml}</div>
+      </div>
     </div>
     ${yukiText ? `
     <div class="day-modal-row">
