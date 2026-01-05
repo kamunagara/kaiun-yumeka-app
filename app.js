@@ -40,6 +40,27 @@ function palaceOfStar(grid, star){
   return (idx >= 0) ? normPalace(IDX_TO_PALACE[idx]) : null;
 }
 
+// 指定した宮（例："兌"）に回座している星を返す
+function starInPalace(grid, palaceName) {
+  const palaceIndexMap = {
+    "坎": 0,
+    "坤": 1,
+    "震": 2,
+    "巽": 3,
+    "中": 4,
+    "乾": 5,
+    "兌": 6,
+    "艮": 7,
+    "離": 8
+  };
+
+  const idx = palaceIndexMap[palaceName];
+  if (idx == null) return null;
+
+  return grid[idx]; // 1〜9（九星）
+}
+
+
 /* ===============================
    開運夢叶カレンダー app.js（安定版）
    - 月切替で止まらない
