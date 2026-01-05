@@ -40,24 +40,17 @@ function palaceOfStar(grid, star){
   return (idx >= 0) ? normPalace(IDX_TO_PALACE[idx]) : null;
 }
 
-// 指定した宮（例："兌"）に回座している星を返す
-function starInPalace(grid, palaceName) {
-  const palaceIndexMap = {
-    "坎": 0,
-    "坤": 1,
-    "震": 2,
-    "巽": 3,
-    "中": 4,
-    "乾": 5,
-    "兌": 6,
-    "艮": 7,
-    "離": 8
-  };
 
-  const idx = palaceIndexMap[palaceName];
-  if (idx == null) return null;
-
-  return grid[idx]; // 1〜9（九星）
+// 指定した宮（例："兌"）に回座している星を返す（gridは [乾,坎,艮,兌,中,震,坤,離,巽] の並び）
+function starInPalace(grid, palaceName){
+  const idxMap = {"乾":0,"坎":1,"艮":2,"兌":3,"中":4,"震":5,"坤":6,"離":7,"巽":8};
+  const p = normPalace(palaceName);
+  const idx = idxMap[p];
+  if(idx==null) return null;
+  const g = Array.isArray(grid) ? grid : [];
+  const v = g[idx];
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 
@@ -517,6 +510,79 @@ function getMonthPalaceMessage(palace){
 
 const DIR_LABEL_JP = {N:"北",NE:"北東",E:"東",SE:"東南",S:"南",SW:"南西",W:"西",NW:"北西",C:"中央"};
 
+
+// ===== 祐気どり：方位（宮）の運＋回座星の運（要点）=====
+// ※「祐気どり」の方位チップをタップしたときだけ表示します。
+const PALACE_FORTUNE_ONE = {
+  "坎": "人脈・恋愛運が育つ",
+  "坤": "仕事・家庭の土台が整う",
+  "震": "発展・スタートの勢いが出る",
+  "巽": "良縁・結婚運が動く",
+  "乾": "財運・試験運が伸びる",
+  "兌": "金運・恋愛運が育つ",
+  "艮": "変化・相続運が動く",
+  "離": "名誉・評価が高まる",
+  "中": "中心が整い安定する"
+};
+
+const STAR_FORTUNE_ONE = {
+  1: "人脈運が上がる",
+  2: "仕事運が上がる",
+  3: "発展運が上がる",
+  4: "良縁運が上がる",
+  5: "五黄は凶。祐気どり不可",
+  6: "有益な人とのご縁が増える",
+  7: "金運が上がる",
+  8: "相続・変化運が動く",
+  9: "名誉・評価が高まる"
+};
+// 祐気どり：運の箇条書き（ユーザー向けに「宮/回座」などの言葉は出さず、内容だけ表示）
+const PALACE_FORTUNE_LIST = {
+  "坎": ["人脈が広がる", "恋愛運が育つ", "心の疲れが癒える"],
+  "坤": ["仕事運が安定する", "家庭運が整う", "コツコツ力がつく"],
+  "震": ["発展の勢いが出る", "モヤモヤが晴れる", "積極的になれる"],
+  "巽": ["良縁がつながる", "交渉が進みやすい", "風通しが良くなる"],
+  "乾": ["財運が伸びる", "試験・勝負運が上がる", "責任感が整う"],
+  "兌": ["金運が育つ", "商売運が上がる", "楽しみが増える"],
+  "艮": ["変化の流れに乗れる", "区切りがつく", "学び・相続運が動く"],
+  "離": ["評価が高まる", "直感が冴える", "魅力が輝く"],
+  "中": ["中心が整い安定する", "気持ちが落ち着く", "流れが整う"]
+};
+
+const STAR_FORTUNE_LIST = {
+  1: ["人脈運アップ", "恋愛運アップ", "心の回復"],
+  2: ["仕事運アップ", "家庭運アップ", "土台が強くなる"],
+  3: ["発展運アップ", "行動力アップ", "停滞が動く"],
+  4: ["良縁運アップ", "交渉運アップ", "信用が育つ"],
+  5: ["（五黄は祐気どり対象外）"],
+  6: ["有益な人とのご縁", "財運アップ", "試験・勝負運アップ"],
+  7: ["金運アップ", "恋愛運アップ", "楽しみが増える"],
+  8: ["相続・変化運が動く", "積み上げが形になる", "貯蓄運アップ"],
+  9: ["名誉・評価運アップ", "人気運アップ", "直感が冴える"]
+};
+
+// 定位盤（宮）に元々いる星：同じ星が回座している場合は運がダブるので回座側を出さない
+const NATAL_STAR_BY_PALACE = { "坎":1, "坤":2, "震":3, "巽":4, "中":5, "乾":6, "兌":7, "艮":8, "離":9 };
+
+
+// 方位ラベル（日本語）→方位キー（N/NE/...）
+const JP_TO_DIR = Object.fromEntries(Object.entries(DIR_LABEL_JP).map(([k,v]) => [v,k]));
+// 別表記ゆれ対応
+JP_TO_DIR["東北"] = "NE";
+JP_TO_DIR["東南"] = "SE";
+JP_TO_DIR["西北"] = "NW";
+JP_TO_DIR["西南"] = "SW";
+
+// 16方位（表記ゆれ/細分方位）→8方位へ丸め
+JP_TO_DIR["東北東"] = "NE";
+JP_TO_DIR["西北西"] = "NW";
+JP_TO_DIR["南南東"] = "SE";
+JP_TO_DIR["東南東"] = "SE";
+JP_TO_DIR["西南西"] = "SW";
+
+// 方位タップ時に参照する「その日の日盤board（方位→星）」を保持
+let CURRENT_DIR_CONTEXT = { board:null, dateStr:null, honmei:null };
+
 // ===== 方位タップ：ワンポイント（吉/凶） =====
 const DIR_TIPS = {
   N:  { good: "休息と内省に向く。無理をしない。", bad: "不安を広げない。考えすぎ注意。" },
@@ -529,75 +595,170 @@ const DIR_TIPS = {
   NW: { good: "決断・責任を果たす。", bad: "独断にならない。" }
 };
 
-// 祐気どりで得られる運（宮＝方位の運）
-const DIR_FORTUNE = {
-  SE: ["結婚運アップ","良縁運アップ","人気運アップ","人間関係のゴタゴタ解消","援助が増える","呼吸器系が丈夫に"],
-  S:  ["各種運アップ","発明運アップ","洗練される","方向性がハッキリする","悪縁が離れていく","心臓が丈夫に"],
-  SW: ["仕事運アップ","不動産運アップ","集中力アップ","心が穏やかに","家庭円満","胃腸が健康に"],
-  E:  ["発展運アップ","緊張感が高まる","才能運アップ","モヤモヤ解消","滞り解消","足が丈夫に"],
-  W:  ["恋人運アップ","金運アップ","商売運アップ","楽天的になれる","コミュニティが広がる","口下手が改善","呼吸器系が丈夫に"],
-  NE: ["相続運アップ","不動産運アップ","子ども運アップ","理想の自分へ変わる","後継者が現れる","悩み事が解決","関節が楽に"],
-  N:  ["人脈運アップ","恋愛運アップ","子ども運アップ","男女関係が良好に","夫婦円満","商売繁盛","心が回復"],
-  NW: ["試験運アップ","財運アップ","子ども運アップ","努力が報われる","心が豊かになる","有益な人とのご縁","健康意識が高まる"]
+
+// ===== 凶方位（ルール別）注意ポイント =====
+// ※方位ごとの注意ではなく「五黄殺/暗剣殺/本命殺/本命的殺/破」それぞれの“気を付けるポイント”
+const BAD_RULE_POINTS = {
+  "五黄殺": [
+    "大きな決断・契約・勝負事は控えめに",
+    "家や身の回りを整える（掃除・換気・整頓）",
+    "焦らず、いつもより慎重に進める"
+  ],
+  "暗剣殺": [
+    "突発対応に備えて時間と心の余裕を確保",
+    "飛び込み行動・強行突破は避ける",
+    "安全確認と段取り（連絡・保険）を丁寧に"
+  ],
+  "本命殺": [
+    "自分のやり方に固執せず、計画を見直す",
+    "確認回数を増やす（ミス・勘違い予防）",
+    "背伸びせず、等身大で進める"
+  ],
+  "本命的殺": [
+    "体調・メンタル最優先（睡眠・休息）",
+    "無理な予定を詰め込まず、余白をつくる",
+    "方向転換や手放しも“整える行動”としてOK"
+  ],
+  "歳破": [
+    "対人・仕事のすれ違いが起きやすいので報連相を丁寧に",
+    "約束・期日・金額など“確認”を徹底",
+    "言葉を柔らかく、感情的な判断は避ける"
+  ],
+  "月破": [
+    "対人・仕事のすれ違いが起きやすいので報連相を丁寧に",
+    "約束・期日・金額など“確認”を徹底",
+    "言葉を柔らかく、感情的な判断は避ける"
+  ],
+  "日破": [
+    "対人・仕事のすれ違いが起きやすいので報連相を丁寧に",
+    "約束・期日・金額など“確認”を徹底",
+    "言葉を柔らかく、感情的な判断は避ける"
+  ],
 };
 
-// 回座している星の運（九星の運）
-const STAR_FORTUNE = {
-  1: ["人脈運アップ","恋愛運アップ","子ども運アップ","心の回復"],
-  2: ["仕事運アップ","不動産運アップ","家庭円満","胃腸が整う"],
-  3: ["発展運アップ","才能運アップ","モヤモヤ解消","行動力アップ"],
-  4: ["良縁運アップ","結婚運アップ","人気運アップ","援助が増える"],
-  5: ["運気の転換","リセットと再出発","土台を整える"],
-  6: ["試験運アップ","財運アップ","有益な人とのご縁","健康意識が高まる"],
-  7: ["恋人運アップ","金運アップ","商売運アップ","コミュニティが広がる"],
-  8: ["相続運アップ","不動産運アップ","後継者運","悩み事が解決"],
-  9: ["各種運アップ","発明運アップ","方向性がハッキリする","名誉運アップ"]
-};
+function buildBadTypeMap(board, honmei, haDir, haLabel){
+  const map = Object.create(null);
 
+  const add = (dir, type) => {
+    if(!dir || dir==="C") return;
+    if(!map[dir]) map[dir] = [];
+    if(!map[dir].includes(type)) map[dir].push(type);
+  };
 
+  const gohDir = findDirOfStar(board, 5);
+  add(gohDir, "五黄殺");
+  add(oppositeDir(gohDir), "暗剣殺");
 
-function renderDirChips(dirKeys, kind, scope, grid){
+  const honDir = findDirOfStar(board, Number(honmei));
+  add(honDir, "本命殺");
+  add(oppositeDir(honDir), "本命的殺");
+
+  if(haDir && haLabel){
+    add(haDir, haLabel); // 歳破 / 月破 / 日破
+  }
+  return map; // { dirKey: ["五黄殺","歳破"] ... }
+}
+
+function orderedBadDirsFromTypeMap(typeMap){
+  const baseOrder = ["N","NE","E","SE","S","SW","W","NW"];
+  return baseOrder.filter(d => typeMap && typeMap[d] && typeMap[d].length);
+}
+
+function renderBadDirChips(typeMap, scope){
+  const dirs = orderedBadDirsFromTypeMap(typeMap);
+  if(!dirs.length) return "—";
+  const sc = scope || "general";
+  return dirs.map(d => {
+    const typeArr = (typeMap[d] || []).filter(Boolean);
+    const typesCsv = typeArr.join(",");
+    const base = DIR_LABEL_JP[d] || d; // 画面表示は方位名のみ（カード上の表記は従来通り）
+    return `<span class="dirChip bad" data-dir="${escapeHtml(d)}" data-kind="bad" data-scope="${escapeHtml(sc)}" data-badtypes="${escapeHtml(typesCsv)}">${escapeHtml(base)}</span>`;
+  }).join("・");
+}
+
+function badDialogHtmlFromTypes(typeList){
+  const types = (typeList || []).filter(Boolean);
+  if(!types.length) return "—";
+  const lines = [];
+  for(const t of types){
+    const pts = BAD_RULE_POINTS[t] || [];
+    if(!pts.length) continue;
+    // 見出しは出さず、ポイントだけ（2〜3個）
+    for(const p of pts.slice(0,3)){
+      lines.push(`・${escapeHtml(p)}`);
+    }
+  }
+  // 重複排除
+  const seen = new Set();
+  const dedup = [];
+  for(const l of lines){
+    if(seen.has(l)) continue;
+    seen.add(l);
+    dedup.push(l);
+  }
+  return dedup.length ? `<div class="bulletList">${dedup.join("<br>")}</div>` : "—";
+}
+
+function renderDirChips(dirKeys, kind){
   if(!Array.isArray(dirKeys) || dirKeys.length===0) return "—";
   return dirKeys
     .filter(Boolean)
-    .map(d => {
-      const pal = DIR_TO_PALACE[d];
-      const star = (grid && pal) ? starInPalace(grid, pal) : null;
-      const starAttr = (star!=null) ? ` data-star="${star}"` : "";
-      const scopeAttr = scope ? ` data-scope="${scope}"` : "";
-      return `<span class="dirChip ${kind}" data-dir="${d}" data-kind="${kind}"${scopeAttr}${starAttr}>${DIR_LABEL_JP[d] ?? d}</span>`;
-    })
+    .map(d => `<span class="dirChip ${kind}" data-dir="${d}" data-kind="${kind}">${DIR_LABEL_JP[d] ?? d}</span>`)
     .join("・");
 }
 
-
-function openDirTip(dirKey, kind, scope, star){
+function openDirTip(dirKey, kind, scope="general", badtypes=""){
   const jp = DIR_LABEL_JP[dirKey] ?? dirKey;
   const isGood = kind === "good";
-  const title = `${jp}（${isGood ? "吉方位" : "凶方位"}）ワンポイント`;
-  const tip = (DIR_TIPS?.[dirKey]?.[isGood ? "good" : "bad"]) || "";
 
-  // 吉方位のときだけ：「祐気どりで得られる運」を追加表示
-  let html = tip ? `<div>${escapeHtml(tip)}</div>` : "";
+  // 祐気どりの日だけ：運の内容だけ（見出しなし・①②なし）
+  if(scope === "yuki" && isGood){
+    const palace = DIR_TO_PALACE?.[dirKey] || null; // "兌" など
+    const seatedStar = CURRENT_DIR_CONTEXT?.board ? Number(CURRENT_DIR_CONTEXT.board[dirKey]) : null; // 1-9
 
-  if(isGood){
-    const dirList  = DIR_FORTUNE?.[dirKey] || [];
-    const starNum  = (star!=null && star!=="") ? Number(star) : null;
-    const starList = (starNum && STAR_FORTUNE?.[starNum]) ? STAR_FORTUNE[starNum] : [];
+    // 宮の運（2〜3個）
+    const pList = (palace && PALACE_FORTUNE_LIST?.[palace]) ? PALACE_FORTUNE_LIST[palace].slice(0,3) : [];
 
-    if(dirList.length || starList.length){
-      const starJp = starNum ? (HONMEI_JP?.[starNum] || `${starNum}`) : "";
-      const sub1 = dirList.length ? `<div class="small" style="margin-top:10px; opacity:.9;">■ ${jp}（${DIR_TO_PALACE[dirKey] || "宮"}）で得られる運</div>
-<ul class="dirFortuneList">${dirList.map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
-      const sub2 = (starList.length && starJp) ? `<div class="small" style="margin-top:8px; opacity:.9;">■ 回座星「${escapeHtml(starJp)}」で得られる運</div>
-<ul class="dirFortuneList">${starList.map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
-      html += `${sub1}${sub2}`;
+    // 回座星の運（2〜3個）※定位盤と同じ星ならダブるので出さない
+    const natal = palace ? (NATAL_STAR_BY_PALACE?.[palace] ?? null) : null;
+    const showStar = seatedStar && seatedStar !== 5 && seatedStar !== natal;
+    const sList = (showStar && STAR_FORTUNE_LIST?.[seatedStar]) ? STAR_FORTUNE_LIST[seatedStar].slice(0,3) : [];
+
+    // 重複排除（同じ文言があれば1回だけ）
+    const seen = new Set();
+    const merged = [];
+    for(const x of [...pList, ...sList]){
+      const t = String(x||"").trim();
+      if(!t) continue;
+      if(seen.has(t)) continue;
+      seen.add(t);
+      merged.push(t);
     }
+
+    const body = merged.length
+      ? `<div class="bulletList">` + merged.map(t => `・${escapeHtml(t)}`).join("<br>") + `</div>`
+      : "—";
+
+    openDialog(`祐気どり：${jp}`, body);
+    return;
   }
 
-  if(!html) html = "—";
-  openDialog(title, html, { html: true });
+  // 通常（年運・月運・日詳細）
+  // 吉方位：活かし方（方位ワンポイント）
+  if(isGood){
+    const title = `${jp}（吉方位）ワンポイント`;
+    const tip = (DIR_TIPS?.[dirKey]?.good) || "—";
+    openDialog(title, tip);
+    return;
+  }
+
+  // 凶方位：ルール別の注意ポイント（五黄殺/暗剣殺/本命殺/本命的殺/破）
+  const types = String(badtypes||"").split(",").map(s => s.trim()).filter(Boolean);
+  const body = badDialogHtmlFromTypes(types);
+  const tLabel = types.length ? types.join("・") : "凶方位";
+  openDialog(`${jp}（${tLabel}）注意ポイント`, body);
 }
+
 
 // イベント委任：方位チップをタップしたらワンポイント表示
 document.addEventListener("click", (ev) => {
@@ -605,12 +766,11 @@ document.addEventListener("click", (ev) => {
   if(!chip) return;
   const dirKey = chip.getAttribute("data-dir");
   const kind = chip.getAttribute("data-kind") || "good";
-  const scope = chip.getAttribute("data-scope") || "";
-  const star = chip.getAttribute("data-star") || "";
   if(!dirKey) return;
-  openDirTip(dirKey, kind, scope, star);
+  const scope = chip.getAttribute("data-scope") || "general";
+  const badtypes = chip.getAttribute("data-badtypes") || "";
+  openDirTip(dirKey, kind, scope, badtypes);
 });
-
 
 
 const HONMEI_JP = {1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星"};
@@ -1240,14 +1400,10 @@ function memoKey(dateStr){
 }
 
 // ===== UI =====
-function openDialog(title, text, opt){
+function openDialog(title, html){
   dialogTitle.textContent = title;
-  const useHtml = !!(opt && opt.html);
-  if(useHtml){
-    dialogText.innerHTML = text;
-  } else {
-    dialogText.textContent = text;
-  }
+  // HTMLを表示できるように（祐気どりの箇条書きなど）
+  dialogText.innerHTML = html;
   dialog.showModal();
 }
 closeDialog?.addEventListener("click", () => dialog.close());
@@ -1668,10 +1824,14 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
   const yearMarks = yBlock?.board?.marks || {};
   const yearGoodDirs = getGoodDirsFromNenban(yearBoardObjForKichi, honmei, yearMarks);
   const yearLuckyText = yearGoodDirs.length ? yearGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
-  const yearLuckyHtml = renderDirChips(yearGoodDirs, "good", "year", yGrid);
-  const yearBadDirs = getBadDirsFromBoard(yearBoardObjForKichi, honmei);
+  const yearLuckyHtml = renderDirChips(yearGoodDirs, "good");
+  // 凶方位（年）：五黄殺・暗剣殺・本命殺・本命的殺・歳破
+  const saihaPal = yearMarks?.saihaPalace || yearMarks?.haPalace || yearMarks?.saiha || null;
+  const saihaDir = saihaPal ? (PALACE_TO_DIR[saihaPal] || null) : null;
+  const yearBadTypeMap = buildBadTypeMap(yearBoardObjForKichi, honmei, saihaDir, "歳破");
+  const yearBadDirs = orderedBadDirsFromTypeMap(yearBadTypeMap);
   const yearBadText = formatDirsJP(yearBadDirs);
-  const yearBadHtml = renderDirChips(yearBadDirs, "bad", "year", yGrid);
+  const yearBadHtml = renderBadDirChips(yearBadTypeMap, "year");
   const yearLuckLabel  = (yearFortuneName || (yBlock?.fortuneName ?? "")) || getLuckLabelFromGrid(yGrid, honmei);
   const yearScoreVal   = (getYearUneiScore(yBlock?.id ?? "", honmei) || (yBlock?.score ?? ""));
   const monthLuckLabel = (mBlock?.fortuneName ?? "") || (mGrid ? getLuckLabelFromGrid(mGrid, honmei) : "") || "";
@@ -1696,10 +1856,14 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
   const monthBoardObj = mGrid ? gridToBoardObj(mGrid) : null;
   const monthGoodDirs = getGoodDirsFromGetsuban(monthBoardObj, honmei, monthMarksCalc || {});
   kichiText = monthGoodDirs.length ? monthGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
-  const kichiHtml = renderDirChips(monthGoodDirs, "good", "month", mGrid);
-  const monthBadDirs = getBadDirsFromBoard(monthBoardObj, honmei);
+  const kichiHtml = renderDirChips(monthGoodDirs, "good");
+  // 凶方位（月）：五黄殺・暗剣殺・本命殺・本命的殺・月破
+  const geppaPal = monthMarks?.haPalace || null;
+  const geppaDir = geppaPal ? (PALACE_TO_DIR[geppaPal] || null) : null;
+  const monthBadTypeMap = buildBadTypeMap(monthBoardObj, honmei, geppaDir, "月破");
+  const monthBadDirs = orderedBadDirsFromTypeMap(monthBadTypeMap);
   kyoText = formatDirsJP(monthBadDirs);
-  const kyoHtml = renderDirChips(monthBadDirs, "bad", "month", mGrid);
+  const kyoHtml = renderBadDirChips(monthBadTypeMap, "month");
 
 // ■ 月盤カード右上：バッジ（暗剣殺／五黄殺／月破(haType)／天道／吉神）
   // ※ まずは MONTH_BADGE_DATA_2026 に入力したものだけを表示（未入力月は何も表示しない）
@@ -1887,6 +2051,9 @@ function openDetail(dateStr){
   const dObj = parseISO(dateStr);
   const board = makeNichiban2026(dObj);
 
+  // 方位タップで参照する「その日の日盤」を保持
+  CURRENT_DIR_CONTEXT = { board, dateStr, honmei: Number(currentHonmei) };
+
   // 今日が入る宮（内部で使う。宮名は表示しない）
   const palace = dayObj.palace ?? inferPalaceFromNichiban(board, Number(currentHonmei)) ?? "中";
 
@@ -1903,21 +2070,29 @@ function openDetail(dateStr){
   const haDir = getNichihaDirByDate(dObj);
   const goodDirs = getGoodDirsFromNichiban(board, Number(currentHonmei), haDir);
   const goodDirText = goodDirs.length ? goodDirs.map(d => DIR_LABEL_JP[d] || d).join("・") : "なし";
-  const goodDirHtml = renderDirChips(goodDirs, "good", "day", board?.grid);
-  const badDirs = getBadDirsFromBoard(board, Number(currentHonmei));
+  const goodDirHtml = renderDirChips(goodDirs, "good");
+  // 凶方位（日）：五黄殺・暗剣殺・本命殺・本命的殺・日破
+  const dayBadTypeMap = buildBadTypeMap(board, Number(currentHonmei), haDir, "日破");
+  const badDirs = orderedBadDirsFromTypeMap(dayBadTypeMap);
   const badDirText = formatDirsJP(badDirs);
-  const badDirHtml = renderDirChips(badDirs, "bad", "day", board?.grid);
+  const badDirHtml = renderBadDirChips(dayBadTypeMap, "day");
 const yukiList = getYukidoriForDate(dateStr, Number(currentHonmei));
-  const yukiText = yukiList.length
-    ? yukiList.map(e => {
-        const t = (e.times && e.times.length) ? e.times.join(" / ") : "";
-        const d = (e.dirs && e.dirs.length) ? e.dirs.join("・") : "";
-        const parts = [];
-        if(t) parts.push(t);
-        if(d) parts.push(d);
-        return parts.join("　");
-      }).join("<br>")
-    : "";
+// 祐気どり（タップ可能：この時だけ「宮の運＋回座星の運」を表示）
+const yukiText = (() => {
+  if(!yukiList.length) return "";
+  const lines = yukiList.map(e => {
+    const t = (e.times && e.times.length) ? e.times.join(" / ") : "";
+    const dirs = Array.isArray(e.dirs) ? e.dirs : [];
+    const chips = dirs.map(jp => {
+      const k = JP_TO_DIR[jp];
+      if(!k) return `<span class="yukiDirText">${escapeHtml(jp)}</span>`;
+      return `<span class="dirChip" data-dir="${k}" data-kind="good" data-scope="yuki">${escapeHtml(jp)}</span>`;
+    }).join(" ");
+    const left = t ? `<span class="yukiTime">${escapeHtml(t)}</span>` : "";
+    return [left, chips].filter(Boolean).join("　");
+  });
+  return lines.join("<br>");
+})();
 
 
   // ラッキー（宮→色/数：宮名は表示しない）
