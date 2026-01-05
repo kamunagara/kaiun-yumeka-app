@@ -1646,6 +1646,9 @@ function renderMonth(){
     const dateStr = `${yyyyStr}-${mmStr}-${pad2(d)}`;
     const dateObj = new Date(yyyy, mm-1, d);
 
+
+    // 干支（十二支）
+    const eto = getBranchByDate(dateObj);
     // 日盤（2026専用）
     const board = makeNichiban2026(dateObj);
 
@@ -1703,7 +1706,8 @@ function renderMonth(){
       <div class="topRow">
         <div class="topLeft">
           <div class="dayNum">${d}</div>
-          ${isSetsuiri ? `` : ``}
+                    <div class="etoMini">${eto}</div>
+${isSetsuiri ? `` : ``}
           ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
           ${hasYuki ? `<span class="yukiMini" style="display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(255,192,203,0.9);color:#b85c7a;background:rgba(255,240,245,0.9);margin-left:4px;">祐</span>` : ``}
           <div class="stateBadge">${state}</div>
@@ -2043,6 +2047,7 @@ function makeNichiban2026(date){
       .badge-item{white-space:nowrap;}
       .badge-row-bottom{margin-top:6px;}
       .dayCell.setsuiri{outline:2px solid rgba(255,182,193,0.8); border-radius:6px;}
+            .etoMini{font-size:11px; line-height:1; opacity:.85; margin-top:2px;}
       `;
     const st = document.createElement('style');
     st.textContent = css;
