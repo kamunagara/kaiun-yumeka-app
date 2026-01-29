@@ -233,6 +233,122 @@ const PALACE_TO_DIR = { "坎":"N","艮":"NE","震":"E","巽":"SE","離":"S","坤
 // 節入り日（毎月の節代わり日）
 const SETSUIRI_DAY_BY_MONTH = {1:5,2:4,3:5,4:5,5:5,6:6,7:7,8:7,9:7,10:8,11:7,12:7};
 
+// ===== 一粒万倍日（万倍日） =====
+// 出典：国立国会図書館「日本の暦」—一粒万倍日は「月（日の属する節月）×日の十二支」で決まる（2通りの選日法があり、現在は併用）。
+// 節月（正月節〜12月節）ごとの「該当する十二支」：
+//  - 一粒万倍日(1): 正月節=丑, 2月節=酉, 3月節=子, 4月節=卯, 5月節=巳, 6月節=酉, 7月節=子, 8月節=卯, 9月節=酉, 10月節=酉, 11月節=亥, 12月節=卯
+//  - 一粒万倍日(2): 正月節=午, 2月節=寅, 3月節=卯, 4月節=辰, 5月節=午, 6月節=午, 7月節=未, 8月節=申, 9月節=午, 10月節=戌, 11月節=子, 12月節=子
+// ここでは「(1)または(2)に当てはまる日」を一粒万倍日として表示します。
+const ICHIRYUMANBAI_BY_SETSUMONTH = {
+  1: ["丑","午"],
+  2: ["酉","寅"],
+  3: ["子","卯"],
+  4: ["卯","辰"],
+  5: ["巳","午"],
+  6: ["酉","午"],
+  7: ["子","未"],
+  8: ["卯","申"],
+  9: ["酉","午"],
+  10:["酉","戌"],
+  11:["亥","子"],
+  12:["卯","子"],
+};
+
+function getSetsuMonthNumber(dateObj){
+  // 一粒万倍日の「節月」は、十二支の月（節入り=12の節）で数えます。
+  // 対応（節のある月）：
+  //  12月節=小寒（だいたい1/5-6）〜 立春前日
+  //  1月節=立春（だいたい2/4）〜 啓蟄前日 ...（以下、毎月の「節」）
+  //
+  // このアプリの monthBlocks は各月の「節入り」を起点に作られているため、
+  // monthBlocks の id（月番号）は「節があるグレゴリオ暦の月」を表しています。
+  // 例）id=2026-01（小寒）→節月=12、id=2026-02（立春）→節月=1
+  const iso = formatISO(dateObj);
+
+  // ① monthBlocks（range）から拾う
+  const mb = findMonthBlock(iso);
+  if(mb && mb.id){
+    const parts = String(mb.id).split("-");
+    const gregMonth = Number(parts[1]);
+    if(gregMonth >= 1 && gregMonth <= 12){
+      return (gregMonth === 1) ? 12 : (gregMonth - 1);
+    }
+  }
+
+  // ② fallback：固定の節入り日テーブルで推定
+  const m = dateObj.getMonth() + 1; // グレゴリオ暦の月
+  const d = dateObj.getDate();
+  const setsuDay = SETSUIRI_DAY_BY_MONTH[m] || 1;
+
+  if(d >= setsuDay){
+    return (m === 1) ? 12 : (m - 1);
+  }
+
+  // 節入り前は「前の節月」
+  if(m === 1) return 11;      // 1月の節入り前＝大雪（11月節）
+  if(m === 2) return 12;      // 2月の節入り前＝小寒（12月節）
+  return (m - 2);             // それ以外は m-2
+}
+
+function isIchiryumanbaibi(dateObj){
+  const eto = getBranchByDate(dateObj); // 例: "子" など
+  const sm = getSetsuMonthNumber(dateObj);
+  const arr = ICHIRYUMANBAI_BY_SETSUMONTH[sm] || [];
+  return arr.includes(eto);
+}
+
+
+
+
+
+// ===== 不成就日 =====
+// 不成就日（ふじょうじゅび）は、暦の「選日」のひとつで「物事が成就しにくい」とされる日です。
+// ここではアプリで主に扱っている 2026年（一般的な日本の吉日カレンダー表記）分を固定リストで表示します。
+const FUJOUJU_BY_YEAR = {
+  2026: new Set([
+    "2026-01-01","2026-01-09","2026-01-17","2026-01-24",
+    "2026-02-01","2026-02-09","2026-02-19","2026-02-27",
+    "2026-03-07","2026-03-15","2026-03-20","2026-03-28",
+    "2026-04-05","2026-04-13","2026-04-17","2026-04-25",
+    "2026-05-03","2026-05-11","2026-05-20","2026-05-28",
+    "2026-06-05","2026-06-13","2026-06-19","2026-06-27",
+    "2026-07-05","2026-07-13","2026-07-19","2026-07-27",
+    "2026-08-04","2026-08-12","2026-08-15","2026-08-23","2026-08-31",
+    "2026-09-08","2026-09-12","2026-09-20","2026-09-28",
+    "2026-10-06","2026-10-11","2026-10-19","2026-10-27",
+    "2026-11-04","2026-11-12","2026-11-20","2026-11-28",
+    "2026-12-06","2026-12-13","2026-12-21","2026-12-29",
+  ])
+};
+
+function isFujouju(dateObj){
+  const iso = formatISO(dateObj);
+  const set = FUJOUJU_BY_YEAR[dateObj.getFullYear()];
+  return !!set && set.has(iso);
+}
+
+
+// ===== 天赦日 =====
+// 天赦日（てんしゃにち）は暦の「選日」のひとつで、年に数回しかない最上の吉日とされます。
+// ここではアプリで主に扱っている 2026年（一般的な日本の吉日カレンダー表記）分を固定リストで表示します。
+const TENSHA_BY_YEAR = {
+  2026: new Set([
+    "2026-03-05",
+    "2026-05-04",
+    "2026-05-20",
+    "2026-07-19",
+    "2026-10-01",
+    "2026-12-16",
+  ])
+};
+
+function isTensha(dateObj){
+  const iso = formatISO(dateObj);
+  const set = TENSHA_BY_YEAR[dateObj.getFullYear()];
+  return !!set && set.has(iso);
+}
+
+
 function pad2(n){ return String(n).padStart(2,"0"); }
 function parseISO(iso){
   const [y,m,d] = iso.split("-").map(Number);
@@ -241,6 +357,23 @@ function parseISO(iso){
 function formatISO(dateObj){
   return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth()+1)}-${pad2(dateObj.getDate())}`;
 }
+
+// ===== 土用期間（方位どり注意）=====
+// ※ここではユーザー指定の土用期間（年固定ではなく月日で判定）を使用します。
+// 冬：1/17〜2/3、春：4/17〜5/4、夏：7/20〜8/6、秋：10/20〜11/6（いずれも両端含む）
+function mdNum(dateObj){
+  return (dateObj.getMonth()+1) * 100 + dateObj.getDate(); // 例：1/17 -> 117
+}
+function getDoyoLabel(dateObj){
+  const md = mdNum(dateObj);
+  if(md >= 117 && md <= 203)  return "冬の土用1月17日～2月3日";
+  if(md >= 417 && md <= 504)  return "春の土用4月17日～5月4日";
+  if(md >= 720 && md <= 806)  return "夏の土用7月20日～8月6日";
+  if(md >= 1020 && md <= 1106) return "秋の土用10月20日～11月6日";
+  return "";
+}
+
+
 
 function isTodayISO(iso){
   // iso: "YYYY-MM-DD"
@@ -582,6 +715,11 @@ JP_TO_DIR["西南西"] = "SW";
 
 // 方位タップ時に参照する「その日の日盤board（方位→星）」を保持
 let CURRENT_DIR_CONTEXT = { board:null, dateStr:null, honmei:null };
+let CURRENT_DAY_DOYO = false; // 日詳細が土用期間か（吉方位チップ制御用）
+
+// 年運・月運の方位タップで参照する盤（renderMonth内で更新）
+let DIR_CONTEXT_BY_SCOPE = { year:null, month:null, day:null, yuki:null };
+
 
 // ===== 方位タップ：ワンポイント（吉/凶） =====
 const DIR_TIPS = {
@@ -699,11 +837,16 @@ function badDialogHtmlFromTypes(typeList){
   return dedup.length ? `<div class="bulletList">${dedup.join("<br>")}</div>` : "—";
 }
 
-function renderDirChips(dirKeys, kind){
+function renderDirChips(dirKeys, kind, scope="general"){
   if(!Array.isArray(dirKeys) || dirKeys.length===0) return "—";
+  const isDoyoDisabled = (scope === "day" && kind === "good" && CURRENT_DAY_DOYO);
   return dirKeys
     .filter(Boolean)
-    .map(d => `<span class="dirChip ${kind}" data-dir="${d}" data-kind="${kind}">${DIR_LABEL_JP[d] ?? d}</span>`)
+    .map(d => {
+      const cls = `dirChip ${kind}${isDoyoDisabled ? " doyoDisabled" : ""}`;
+      const doyoAttr = isDoyoDisabled ? ` data-doyo="1"` : ``;
+      return `<span class="${cls}" data-dir="${d}" data-kind="${kind}" data-scope="${escapeHtml(scope)}"${doyoAttr}>${DIR_LABEL_JP[d] ?? d}</span>`;
+    })
     .join("・");
 }
 
@@ -743,6 +886,72 @@ function openDirTip(dirKey, kind, scope="general", badtypes=""){
     return;
   }
 
+  // 通常（日詳細の吉方位）：得られる運を表示（祐気どり表示と同じ考え方）
+  if(scope === "day" && isGood){
+    const palace = DIR_TO_PALACE?.[dirKey] || null; // "兌" など
+    const seatedStar = CURRENT_DIR_CONTEXT?.board ? Number(CURRENT_DIR_CONTEXT.board[dirKey]) : null; // 1-9
+
+    // 宮の運（2〜3個）
+    const pList = (palace && PALACE_FORTUNE_LIST?.[palace]) ? PALACE_FORTUNE_LIST[palace].slice(0,3) : [];
+
+    // 回座星の運（2〜3個）※定位盤と同じ星ならダブるので出さない
+    const natal = palace ? (NATAL_STAR_BY_PALACE?.[palace] ?? null) : null;
+    const showStar = seatedStar && seatedStar !== 5 && seatedStar !== natal;
+    const sList = (showStar && STAR_FORTUNE_LIST?.[seatedStar]) ? STAR_FORTUNE_LIST[seatedStar].slice(0,3) : [];
+
+    // 重複排除
+    const seen = new Set();
+    const merged = [];
+    for(const x of [...pList, ...sList]){
+      const t = String(x||"").trim();
+      if(!t) continue;
+      if(seen.has(t)) continue;
+      seen.add(t);
+      merged.push(t);
+    }
+
+    const body = merged.length
+      ? `<div class="bulletList">` + merged.map(t => `・${escapeHtml(t)}`).join("<br>") + `</div>`
+      : "—";
+
+    openDialog(`${jp}（吉方位）得られる運`, body);
+    return;
+  }
+
+  // 通常（年運・月運の吉方位）：得られる運を表示
+  if((scope === "year" || scope === "month") && isGood){
+    const palace = DIR_TO_PALACE?.[dirKey] || null; // "兌" など
+    const b = DIR_CONTEXT_BY_SCOPE?.[scope] || CURRENT_DIR_CONTEXT?.board;
+    const seatedStar = b ? Number(b[dirKey]) : null; // 1-9
+
+    // 宮の運（2〜3個）
+    const pList = (palace && PALACE_FORTUNE_LIST?.[palace]) ? PALACE_FORTUNE_LIST[palace].slice(0,3) : [];
+
+    // 回座星の運（2〜3個）※定位盤と同じ星ならダブるので出さない
+    const natal = palace ? (NATAL_STAR_BY_PALACE?.[palace] ?? null) : null;
+    const showStar = seatedStar && seatedStar !== 5 && seatedStar !== natal;
+    const sList = (showStar && STAR_FORTUNE_LIST?.[seatedStar]) ? STAR_FORTUNE_LIST[seatedStar].slice(0,3) : [];
+
+    // 重複排除
+    const seen = new Set();
+    const merged = [];
+    for(const x of [...pList, ...sList]){
+      const t = String(x||"").trim();
+      if(!t) continue;
+      if(seen.has(t)) continue;
+      seen.add(t);
+      merged.push(t);
+    }
+
+    const body = merged.length
+      ? `<div class="bulletList">` + merged.map(t => `・${escapeHtml(t)}`).join("<br>") + `</div>`
+      : "—";
+
+    const scopeLabel = (scope === "year") ? "年運" : "月運";
+    openDialog(`${jp}（吉方位）得られる運｜${scopeLabel}`, body);
+    return;
+  }
+
   // 通常（年運・月運・日詳細）
   // 吉方位：活かし方（方位ワンポイント）
   if(isGood){
@@ -769,6 +978,14 @@ document.addEventListener("click", (ev) => {
   if(!dirKey) return;
   const scope = chip.getAttribute("data-scope") || "general";
   const badtypes = chip.getAttribute("data-badtypes") || "";
+
+  // ② 土用期間：日詳細の「吉方位」はグレー表示＆クリック時に注意を優先
+  const isDoyo = (chip.getAttribute("data-doyo") === "1");
+  if(isDoyo && scope === "day" && kind === "good"){
+    openDialog("土用期間のため方位どり非推奨", "この期間は、吉方位へ行っても吉運が得られにくいとされます。移動は必要最小限にし、整える・片付け・休養・調整に力を使うのがおすすめです。");
+    return;
+  }
+
   openDirTip(dirKey, kind, scope, badtypes);
 });
 
@@ -1449,18 +1666,18 @@ function stablePick(list, seedStr){
   return list[idx];
 }
 
-// 宮→吉香（各3。表示はランダム1つ）
-// 宮→吉香（各3。表示はランダム1つ）
+// 宮→吉香（各3。表示は3つ）
+// 宮→吉香（各3。表示は3つ）
 const PALACE_KIKOU = {
-  "巽": ["ベルガモット", "ライム", "バジル"],
-  "離": ["イランイラン", "オレンジ", "シナモン"],
-  "坤": ["ラベンダー", "ローマンカモミール", "ベチバー"],
-  "震": ["ペパーミント", "レモン", "ローズマリー"],
-  "中": ["レモングラス", "ティーツリー", "ベチバー"],
-  "兌": ["ゼラニウム", "オレンジ", "パチョリ"],
-  "艮": ["サンダルウッド", "ヒノキ", "ベチバー"],
-  "坎": ["サイプレス", "ユーカリ", "ジュニパーベリー"],
-  "乾": ["フランキンセンス", "サンダルウッド", "グレープフルーツ"],
+  "乾": ["フランキンセンス", "ペパーミント", "ローズマリー"],
+  "兌": ["ワイルドオレンジ", "ベルガモット", "パチョリ"],
+  "離": ["イランイラン", "ゼラニウム", "レモングラス"],
+  "震": ["ペパーミント", "レモン", "ユーカリプタス"],
+  "巽": ["ライム", "ティーツリー", "バジル"],
+  "坎": ["ラベンダー", "サイプレス", "ジュニパーベリー"],
+  "艮": ["シダーウッド", "フランキンセンス", "ヒノキ"],
+  "坤": ["ラベンダー", "ゼラニウム", "ベチバー"],
+  "中": ["フランキンセンス", "ベチバー", "レモン"],
 };
 
 // 宮→ひとこと（各3。表示はランダム1つ）
@@ -1821,10 +2038,12 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
 
   // 表示用（本命星×月）点数＆運名：データが無い月はここで自動補完
   const yearBoardObjForKichi = yGrid ? gridToBoardObj(yGrid) : null;
+  DIR_CONTEXT_BY_SCOPE.year = yearBoardObjForKichi;
+
   const yearMarks = yBlock?.board?.marks || {};
   const yearGoodDirs = getGoodDirsFromNenban(yearBoardObjForKichi, honmei, yearMarks);
   const yearLuckyText = yearGoodDirs.length ? yearGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
-  const yearLuckyHtml = renderDirChips(yearGoodDirs, "good");
+  const yearLuckyHtml = renderDirChips(yearGoodDirs, "good", "year");
   // 凶方位（年）：五黄殺・暗剣殺・本命殺・本命的殺・歳破
   const saihaPal = yearMarks?.saihaPalace || yearMarks?.haPalace || yearMarks?.saiha || null;
   const saihaDir = saihaPal ? (PALACE_TO_DIR[saihaPal] || null) : null;
@@ -1854,9 +2073,11 @@ const monthAnkenDir = monthGohDir ? oppositeDir(monthGohDir) : null;
   
   // 月の吉方位を計算（除外：本命星の向かい／暗剣殺／五黄殺／月破／中宮）
   const monthBoardObj = mGrid ? gridToBoardObj(mGrid) : null;
+  DIR_CONTEXT_BY_SCOPE.month = monthBoardObj;
+
   const monthGoodDirs = getGoodDirsFromGetsuban(monthBoardObj, honmei, monthMarksCalc || {});
   kichiText = monthGoodDirs.length ? monthGoodDirs.map(d => DIR_LABEL_JP[d]).join("・") : "—";
-  const kichiHtml = renderDirChips(monthGoodDirs, "good");
+  const kichiHtml = renderDirChips(monthGoodDirs, "good", "month");
   // 凶方位（月）：五黄殺・暗剣殺・本命殺・本命的殺・月破
   const geppaPal = monthMarks?.haPalace || null;
   const geppaDir = geppaPal ? (PALACE_TO_DIR[geppaPal] || null) : null;
@@ -2010,6 +2231,9 @@ function renderMonth(){
     const mark = hasAn ? "ア" : (hasHa ? "破" : "");
     const yukiEvents = getYukidoriForDate(dateStr, Number(currentHonmei));
     const hasYuki = yukiEvents.length > 0;
+    const isManbai = isIchiryumanbaibi(dateObj);
+    const isFujou = isFujouju(dateObj);
+    const isTenshaDay = isTensha(dateObj);
     const isSetsuiri = (setsuDay != null && d === setsuDay);
 
     const cell = document.createElement("div");
@@ -2022,6 +2246,9 @@ function renderMonth(){
 ${isSetsuiri ? `` : ``}
           ${mark ? `<span class="kyoMini">${mark}</span>` : ``}
           ${hasYuki ? `<span class="yukiMini" style="display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(255,192,203,0.9);color:#b85c7a;background:rgba(255,240,245,0.9);margin-left:4px;">祐</span>` : ``}
+          ${isTenshaDay ? `<span class="tenshaMini" title="天赦日">天</span>` : ``}
+          ${isManbai ? `<span class="manbaiMini" title="一粒万倍日">万</span>` : ``}
+          ${isFujou ? `<span class="fujoujuMini" title="不成就日">不</span>` : ``}
           <div class="stateBadge">${state}</div>
         </div>
         <div class="scoreNum">${(dayScore!=="" && dayScore!=null) ? (dayScore + "点") : ""}</div>
@@ -2049,10 +2276,14 @@ function openDetail(dateStr){
 
   const dayObj = (data?.days && data.days[dateStr]) ? data.days[dateStr] : {};
   const dObj = parseISO(dateStr);
+  const doyoText = getDoyoLabel(dObj);
+  CURRENT_DAY_DOYO = !!doyoText;
   const board = makeNichiban2026(dObj);
 
   // 方位タップで参照する「その日の日盤」を保持
   CURRENT_DIR_CONTEXT = { board, dateStr, honmei: Number(currentHonmei) };
+  DIR_CONTEXT_BY_SCOPE.day = board;
+
 
   // 今日が入る宮（内部で使う。宮名は表示しない）
   const palace = dayObj.palace ?? inferPalaceFromNichiban(board, Number(currentHonmei)) ?? "中";
@@ -2070,7 +2301,7 @@ function openDetail(dateStr){
   const haDir = getNichihaDirByDate(dObj);
   const goodDirs = getGoodDirsFromNichiban(board, Number(currentHonmei), haDir);
   const goodDirText = goodDirs.length ? goodDirs.map(d => DIR_LABEL_JP[d] || d).join("・") : "なし";
-  const goodDirHtml = renderDirChips(goodDirs, "good");
+  const goodDirHtml = renderDirChips(goodDirs, "good", "day");
   // 凶方位（日）：五黄殺・暗剣殺・本命殺・本命的殺・日破
   const dayBadTypeMap = buildBadTypeMap(board, Number(currentHonmei), haDir, "日破");
   const badDirs = orderedBadDirsFromTypeMap(dayBadTypeMap);
@@ -2102,7 +2333,8 @@ const yukiText = (() => {
 
   // 吉香（宮→アロマを1つランダム表示：日付で固定）
   const pKey2 = (palace === "中宮") ? "中" : palace;
-  const kikkouOil = stablePick(PALACE_KIKOU[pKey2] || [], `${dateStr}|${pKey2}|oil`) || "—";
+  const kikkouOils = (PALACE_KIKOU[pKey2] || []);
+  const kikkouOilText = (Array.isArray(kikkouOils) && kikkouOils.length) ? kikkouOils.join("・") : "—";
 
   // ひとこと・開運アクション（宮ごとの候補からランダム表示：日付で固定）
   const pKey = (palace === "中宮") ? "中" : palace;
@@ -2124,14 +2356,33 @@ const yukiText = (() => {
   const warnText = dayWarnings.length ? dayWarnings.join("・") : "なし";
   const caution = cautionMessage(palace, dayWarnings, dateStr);
 
+  // 選日（モーダル表示用）
+  const dObjSel = new Date(dateStr + "T00:00:00");
+  const senjitsu = [];
+  if (isTensha(dObjSel)) senjitsu.push("天赦日");
+  if (isIchiryumanbaibi(dObjSel)) senjitsu.push("一粒万倍日");
+  if (isFujouju(dObjSel)) senjitsu.push("不成就日");
+  const senjitsuText = senjitsu.length ? senjitsu.join("・") : "";
+
+  // ① 今日の注意（1行まとめ）— 土用 / 不成就日 / 主要凶作用など
+  const topNotes = [];
+  if(doyoText) topNotes.push(`${doyoText}：方位どり非推奨`);
+  if(senjitsu.includes("不成就日")) topNotes.push("不成就日：大事な決定は慎重に");
+  if(dayWarnings.includes("五黄殺") || dayWarnings.includes("暗剣殺") || dayWarnings.includes("本命殺") || dayWarnings.includes("本命的殺") || dayWarnings.includes("日破")){
+    topNotes.push("凶作用あり：焦らず確認");
+  }
+  const topNoticeText = topNotes.join("／");
+
   bodyEl.innerHTML = `
+    ${topNoticeText ? `<div class="topNotice">${escapeHtml(topNoticeText)}</div>` : ``}
     <div class="day-modal-row">
       <div class="label">今日の運勢</div>
-      <div class="value">${dayScore}点</div>
+      <div class="value">${dayScore}点${senjitsuText ? ` <span class="senjitsuMini">${senjitsuText}</span>` : ``}</div>
     </div>
     <div class="day-modal-row span2">
       <div class="label">吉方位/凶方位（タップでワンポイント）</div>
       <div class="value">
+        ${doyoText ? `<div class="doyoNote">${escapeHtml(doyoText)}（この期間は方位どり非推奨）</div>` : ``}
         <div><span class="dirMiniLabel">吉：</span>${goodDirHtml}</div>
         <div style="margin-top:6px;"><span class="dirMiniLabel">凶：</span>${badDirHtml}</div>
       </div>
@@ -2141,8 +2392,6 @@ const yukiText = (() => {
       <div class="label">祐気どり</div>
       <div class="value">${yukiText}</div>
     </div>` : ``}
-
-
     <div class="day-modal-row">
       <div class="label">注意（凶作用）</div>
       <div class="value">${warnText}</div>
@@ -2150,7 +2399,7 @@ const yukiText = (() => {
     </div>
     <div class="day-modal-row">
       <div class="label">吉数 / 吉色 / 吉香</div>
-      <div class="value">${luckyNumText} ／ ${luckyColorText} ／ ${escapeHtml(kikkouOil)}</div>
+      <div class="value">${luckyNumText} ／ ${luckyColorText} ／ ${escapeHtml(kikkouOilText)}</div>
     </div>
 
     <div class="day-modal-row span2">
@@ -2378,6 +2627,16 @@ function makeNichiban2026(date){
       .badge-row-bottom{margin-top:6px;}
       .dayCell.setsuiri{outline:2px solid rgba(255,182,193,0.8); border-radius:6px;}
             .etoMini{font-size:11px; line-height:1; opacity:.85; margin-top:2px;}
+      .senjitsuMini{display:inline-block;font-size:12px;line-height:1;padding:2px 6px;border-radius:999px;border:1px solid rgba(160,160,160,0.75);opacity:.9;vertical-align:middle;}
+      .doyoNote{margin-bottom:6px;font-size:12px;line-height:1.3;padding:6px 8px;border-radius:10px;border:1px dashed rgba(160,160,160,0.7);opacity:.95;}
+      .topNotice{margin-bottom:10px;font-size:12px;line-height:1.35;padding:8px 10px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);opacity:.95;}
+      .dirChip.doyoDisabled{opacity:.45;filter:grayscale(1);cursor:not-allowed;}
+      .dirChip.doyoDisabled:hover{transform:none;}
+
+
+      .tenshaMini{display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(135,206,250,0.95);color:#0b5a8a;background:rgba(235,248,255,0.95);margin-left:4px;}
+      .manbaiMini{display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(255,215,0,0.9);color:#8a6a00;background:rgba(255,248,220,0.95);margin-left:4px;}
+      .fujoujuMini{display:inline-block;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;border:1px solid rgba(180,180,180,0.9);color:#555;background:rgba(245,245,245,0.95);margin-left:4px;}
       `;
     const st = document.createElement('style');
     st.textContent = css;
